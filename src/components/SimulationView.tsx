@@ -1346,6 +1346,31 @@ function FinalStats({
 
   const bestPlayer = playerStats.reduce((a, b) => (a.totalPayoff > b.totalPayoff ? a : b));
 
+  // Compute best strategy: which strategy produced the highest average payoff when played
+  const strategyPerformance = useMemo(() => {
+    const stats: Record<string, { totalPayoff: number; timesPlayed: number; players: Set<string> }> = {};
+    for (const round of result.rounds) {
+      for (const pid of playerIds) {
+        const s = round.strategies[pid];
+        if (!s) continue;
+        if (!stats[s]) stats[s] = { totalPayoff: 0, timesPlayed: 0, players: new Set() };
+        stats[s].totalPayoff += round.payoffs[pid] ?? 0;
+        stats[s].timesPlayed += 1;
+        stats[s].players.add(pid);
+      }
+    }
+    return Object.entries(stats)
+      .map(([name, data]) => ({
+        name,
+        avgPayoff: data.timesPlayed > 0 ? data.totalPayoff / data.timesPlayed : 0,
+        totalPayoff: data.totalPayoff,
+        timesPlayed: data.timesPlayed,
+        playerCount: data.players.size,
+        usagePct: Math.round((data.timesPlayed / (result.rounds.length * playerIds.length)) * 100),
+      }))
+      .sort((a, b) => b.avgPayoff - a.avgPayoff);
+  }, [result.rounds, playerIds]);
+
   const RadialGauge = ({ value, color, size = 40 }: { value: number; color: string; size?: number }) => {
     const r = (size - 6) / 2;
     const circumference = 2 * Math.PI * r;
@@ -1456,6 +1481,95 @@ function FinalStats({
           );
         })}
       </div>
+
+      {/* Best Strategy Ranking */}
+      {strategyPerformance.length > 0 && (
+        <motion.div
+          className="rounded-xl p-4 border border-[#ffd43b]/20 bg-[#ffd43b]/5 mb-4"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5 }}
+        >
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-7 h-7 rounded-lg bg-[#ffd43b]/20 flex items-center justify-center">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffd43b" strokeWidth="2">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+              </svg>
+            </div>
+            <div>
+              <div className="text-xs font-bold text-[#ffd43b]">Best Strategy</div>
+              <div className="text-[10px] text-[#e0e0ff]/40">Ranked by average payoff per round when used</div>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            {strategyPerformance.map((sp, i) => {
+              const maxAvg = strategyPerformance[0].avgPayoff || 1;
+              const barPct = (sp.avgPayoff / maxAvg) * 100;
+              const isBest = i === 0;
+              const color = getStrategyColor(sp.name, strategyPerformance.map((s) => s.name));
+              return (
+                <motion.div
+                  key={sp.name}
+                  className="flex items-center gap-2"
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.55 + i * 0.06 }}
+                >
+                  <div
+                    className="w-5 h-5 rounded-md flex items-center justify-center text-[9px] font-black shrink-0"
+                    style={{
+                      backgroundColor: isBest ? '#ffd43b20' : '#25253e',
+                      color: isBest ? '#ffd43b' : '#e0e0ff40',
+                      border: isBest ? '1px solid #ffd43b30' : '1px solid transparent',
+                    }}
+                  >
+                    {i + 1}
+                  </div>
+                  <div className="w-28 shrink-0 truncate">
+                    <span className={`text-[11px] font-medium ${isBest ? 'text-[#ffd43b]' : 'text-[#e0e0ff]/70'}`}>
+                      {sp.name}
+                    </span>
+                  </div>
+                  <div className="flex-1 h-4 bg-[#0a0a1a]/60 rounded-md overflow-hidden relative">
+                    <motion.div
+                      className="h-full rounded-md"
+                      style={{
+                        backgroundColor: isBest ? '#ffd43b' : color,
+                        opacity: isBest ? 0.9 : 0.6,
+                      }}
+                      initial={{ width: 0 }}
+                      animate={{ width: `${Math.max(barPct, 3)}%` }}
+                      transition={{ duration: 0.6, delay: 0.6 + i * 0.06 }}
+                    />
+                  </div>
+                  <div className="w-16 text-right shrink-0">
+                    <span className={`text-[11px] font-bold font-mono ${isBest ? 'text-[#ffd43b]' : 'text-[#e0e0ff]/60'}`}>
+                      {sp.avgPayoff.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="w-12 text-right shrink-0">
+                    <span className="text-[9px] text-[#e0e0ff]/30">
+                      {sp.usagePct}% used
+                    </span>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+
+          {/* Best strategy summary */}
+          {strategyPerformance.length >= 2 && (
+            <div className="mt-3 pt-2 border-t border-[#ffd43b]/10 text-[11px] text-[#e0e0ff]/50 leading-relaxed">
+              <span className="text-[#ffd43b] font-medium">&quot;{strategyPerformance[0].name}&quot;</span> was the most effective strategy,
+              averaging <span className="text-[#ffd43b] font-mono font-medium">{strategyPerformance[0].avgPayoff.toFixed(2)}</span> payoff per use
+              {strategyPerformance[0].avgPayoff > strategyPerformance[1].avgPayoff * 1.15
+                ? ` — significantly outperforming "${strategyPerformance[1].name}" (${strategyPerformance[1].avgPayoff.toFixed(2)}).`
+                : `, closely followed by "${strategyPerformance[1].name}" (${strategyPerformance[1].avgPayoff.toFixed(2)}).`}
+            </div>
+          )}
+        </motion.div>
+      )}
 
       {/* Convergence info */}
       <div
