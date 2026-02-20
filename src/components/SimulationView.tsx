@@ -3,7 +3,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '@/lib/store';
-import { GameAnalysis, SimulationConfig, SimulationResult } from '@/lib/types';
+import { GameAnalysis, SimulationConfig, SimulationResult, CustomSimulationStrategy } from '@/lib/types';
 import { runClientSimulation } from '@/lib/simulation';
 
 // ---------------------------------------------------------------------------
@@ -132,6 +132,136 @@ function ConfigSlider({
 }
 
 // ---------------------------------------------------------------------------
+// Custom Strategy Builder
+// ---------------------------------------------------------------------------
+
+const ALGORITHM_LABELS: { key: string; label: string }[] = [
+  { key: 'tit-for-tat', label: 'Tit-for-Tat' },
+  { key: 'random', label: 'Random' },
+  { key: 'greedy', label: 'Greedy' },
+  { key: 'adaptive', label: 'Adaptive' },
+  { key: 'best-response', label: 'Best Response' },
+  { key: 'fictitious-play', label: 'Fictitious Play' },
+  { key: 'replicator-dynamics', label: 'Replicator' },
+];
+
+function CustomStrategyBuilder({
+  onSave,
+  onCancel,
+}: {
+  onSave: (strategy: CustomSimulationStrategy) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [weights, setWeights] = useState<Record<string, number>>(() => {
+    const w: Record<string, number> = {};
+    for (const algo of ALGORITHM_LABELS) w[algo.key] = 0;
+    return w;
+  });
+  const [cooperationBias, setCooperationBias] = useState(0);
+
+  const handleSave = () => {
+    if (!name.trim()) return;
+    const strategy: CustomSimulationStrategy = {
+      id: `cs_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      name: name.trim(),
+      description: description.trim(),
+      weights: { ...weights },
+      cooperationBias,
+    };
+    onSave(strategy);
+  };
+
+  return (
+    <motion.div
+      className="mt-3 rounded-xl border border-[#00b894]/30 bg-[#00b894]/5 p-4 space-y-3"
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: 'auto' }}
+      exit={{ opacity: 0, height: 0 }}
+      transition={{ duration: 0.3 }}
+    >
+      <div className="flex items-center justify-between">
+        <h4 className="text-[11px] font-bold text-[#00b894] flex items-center gap-1.5">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 5v14" /><path d="M5 12h14" />
+          </svg>
+          Build Custom Strategy
+        </h4>
+        <button
+          onClick={onCancel}
+          className="text-[10px] text-[#e0e0ff]/40 hover:text-[#e0e0ff]/70 transition-colors"
+        >
+          Cancel
+        </button>
+      </div>
+
+      {/* Name and description */}
+      <div className="space-y-2">
+        <input
+          type="text"
+          placeholder="Strategy name..."
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="w-full bg-[#0a0a1a] border border-[#25253e] rounded-lg px-3 py-2 text-[11px] text-[#e0e0ff]
+            placeholder:text-[#e0e0ff30] outline-none focus:border-[#00b894] transition-colors"
+        />
+        <input
+          type="text"
+          placeholder="Description (optional)..."
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          className="w-full bg-[#0a0a1a] border border-[#25253e] rounded-lg px-3 py-2 text-[11px] text-[#e0e0ff]
+            placeholder:text-[#e0e0ff30] outline-none focus:border-[#00b894] transition-colors"
+        />
+      </div>
+
+      {/* Algorithm weight sliders */}
+      <div className="space-y-1">
+        <span className="text-[10px] text-[#00b894]/80 font-medium">Algorithm Weights</span>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+          {ALGORITHM_LABELS.map((algo) => (
+            <ConfigSlider
+              key={algo.key}
+              label={algo.label}
+              value={weights[algo.key]}
+              min={0}
+              max={1}
+              step={0.05}
+              displayValue={weights[algo.key].toFixed(2)}
+              onChange={(v) => setWeights((prev) => ({ ...prev, [algo.key]: v }))}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Cooperation bias slider */}
+      <ConfigSlider
+        label="Cooperation Bias"
+        value={cooperationBias}
+        min={-1}
+        max={1}
+        step={0.1}
+        displayValue={cooperationBias > 0 ? `+${cooperationBias.toFixed(1)}` : cooperationBias.toFixed(1)}
+        onChange={(v) => setCooperationBias(v)}
+      />
+
+      {/* Save button */}
+      <motion.button
+        onClick={handleSave}
+        disabled={!name.trim()}
+        className="w-full py-2 rounded-lg bg-[#00b894] text-white text-[11px] font-bold
+          hover:bg-[#00a884] disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+        whileHover={{ scale: 1.01 }}
+        whileTap={{ scale: 0.99 }}
+      >
+        Save Custom Strategy
+      </motion.button>
+    </motion.div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Setup Panel
 // ---------------------------------------------------------------------------
 
@@ -150,9 +280,10 @@ function SetupPanel({
   onRunSimulation: () => void;
   onChangeScenario: () => void;
 }) {
-  const { setInput, setAnalysis, setIsAnalyzing, setError, addToHistory } = useStore();
+  const { setInput, setAnalysis, setIsAnalyzing, setError, addToHistory, customSimulationStrategies, addCustomSimulationStrategy, removeCustomSimulationStrategy } = useStore();
   const [localInput, setLocalInput] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
+  const [showCustomBuilder, setShowCustomBuilder] = useState(false);
 
   const handleAnalyzeFirst = useCallback(async () => {
     if (!localInput.trim() || analyzing) return;
@@ -316,10 +447,68 @@ function SetupPanel({
                 {opt.label}
               </button>
             ))}
+            {/* Custom strategy buttons */}
+            {customSimulationStrategies.map((cs) => (
+              <div key={cs.id} className="relative group/custom">
+                <button
+                  onClick={() => onConfigChange({ strategy: 'custom-' + cs.id })}
+                  className={`px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all ${
+                    config.strategy === 'custom-' + cs.id
+                      ? 'bg-[#00b894] text-white shadow-[0_0_12px_rgba(0,184,148,0.4)]'
+                      : 'bg-[#00b894]/20 text-[#00b894] hover:bg-[#00b894]/30'
+                  }`}
+                >
+                  {cs.name}
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeCustomSimulationStrategy(cs.id);
+                    if (config.strategy === 'custom-' + cs.id) {
+                      onConfigChange({ strategy: 'adaptive' });
+                    }
+                  }}
+                  className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-[#ff6b6b] text-white
+                    text-[8px] font-bold flex items-center justify-center opacity-0 group-hover/custom:opacity-100
+                    transition-opacity hover:bg-[#ee5a5a]"
+                  title="Remove custom strategy"
+                >
+                  x
+                </button>
+              </div>
+            ))}
+
+            {/* Add custom strategy button */}
+            <button
+              onClick={() => setShowCustomBuilder(!showCustomBuilder)}
+              className={`px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all border border-dashed ${
+                showCustomBuilder
+                  ? 'border-[#00b894] text-[#00b894] bg-[#00b894]/10'
+                  : 'border-[#25253e] text-[#e0e0ff]/30 hover:border-[#00b894]/50 hover:text-[#00b894]/60'
+              }`}
+            >
+              + Custom
+            </button>
           </div>
           <p className="text-[10px] text-[#e0e0ff]/30 mt-1.5">
-            {STRATEGY_OPTIONS.find((o) => o.value === config.strategy)?.description}
+            {config.strategy.startsWith('custom-')
+              ? customSimulationStrategies.find((cs) => config.strategy === 'custom-' + cs.id)?.description || 'Custom blended strategy.'
+              : STRATEGY_OPTIONS.find((o) => o.value === config.strategy)?.description}
           </p>
+
+          {/* Custom Strategy Builder */}
+          <AnimatePresence>
+            {showCustomBuilder && (
+              <CustomStrategyBuilder
+                onSave={(strategy) => {
+                  addCustomSimulationStrategy(strategy);
+                  setShowCustomBuilder(false);
+                  onConfigChange({ strategy: 'custom-' + strategy.id });
+                }}
+                onCancel={() => setShowCustomBuilder(false)}
+              />
+            )}
+          </AnimatePresence>
         </div>
       </div>
 
@@ -1432,6 +1621,7 @@ export default function SimulationView() {
     setIsSimulating,
     error,
     setError,
+    customSimulationStrategies,
   } = useStore();
 
   const [showChangeScenario, setShowChangeScenario] = useState(false);
@@ -1447,7 +1637,7 @@ export default function SimulationView() {
     setError(null);
 
     try {
-      const result = runClientSimulation(analysis, simulationConfig);
+      const result = runClientSimulation(analysis, simulationConfig, customSimulationStrategies);
       setSimulationResult(result);
       setDisplayedRounds(0);
       setIsPlaying(true);
@@ -1456,7 +1646,7 @@ export default function SimulationView() {
     } finally {
       setIsSimulating(false);
     }
-  }, [analysis, simulationConfig, isSimulating, setIsSimulating, setError, setSimulationResult]);
+  }, [analysis, simulationConfig, customSimulationStrategies, isSimulating, setIsSimulating, setError, setSimulationResult]);
 
   useEffect(() => {
     if (!isPlaying || !simulationResult) return;

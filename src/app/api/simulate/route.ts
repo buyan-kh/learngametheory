@@ -424,12 +424,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Custom strategies are client-side only; fall back to 'adaptive' on server
+    const resolvedStrategy = (config.strategy && typeof config.strategy === 'string' && config.strategy.startsWith('custom-'))
+      ? 'adaptive'
+      : (config.strategy ?? 'adaptive');
+
     // Clamp config values to valid ranges
     const safeConfig: SimulationConfig = {
       rounds: Math.min(Math.max(Math.round(config.rounds), 1), 200),
       noise: Math.min(Math.max(config.noise, 0), 1),
       learningRate: Math.min(Math.max(config.learningRate, 0), 1),
-      strategy: config.strategy ?? 'adaptive',
+      strategy: resolvedStrategy,
     };
 
     const result = runSimulation(analysis, safeConfig);

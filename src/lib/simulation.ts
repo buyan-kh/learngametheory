@@ -15,6 +15,7 @@ import type {
   SimulationResult,
   SimulationRound,
   PayoffCell,
+  CustomSimulationStrategy,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -425,6 +426,71 @@ function pickReplicatorDynamics(
 }
 
 // ---------------------------------------------------------------------------
+// Custom Strategy: weighted blend of all built-in algorithms
+// ---------------------------------------------------------------------------
+
+/**
+ * Pick a strategy using a custom weighted blend of all built-in algorithms.
+ *
+ * Each built-in algorithm proposes a strategy, and each proposal is weighted
+ * by the corresponding entry in `customConfig.weights`. A cooperation bias
+ * then adjusts the final probabilities before sampling.
+ */
+function pickCustomStrategy(
+  playerId: string,
+  strategies: string[],
+  customConfig: CustomSimulationStrategy,
+  lastRound: SimulationRound | null,
+  history: SimulationRound[],
+  matrix: PayoffCell[],
+  playerIds: string[],
+  learningRate: number,
+  replicatorState: ReplicatorState,
+): string {
+  // Gather each built-in algorithm's proposed strategy.
+  const proposals: { algorithm: string; strategy: string }[] = [
+    { algorithm: 'tit-for-tat', strategy: pickTitForTat(playerId, strategies, lastRound, playerIds) },
+    { algorithm: 'random', strategy: pickRandomStrategy(strategies) },
+    { algorithm: 'greedy', strategy: pickGreedy(playerId, strategies, lastRound, matrix, playerIds) },
+    { algorithm: 'adaptive', strategy: pickAdaptive(playerId, strategies, history, learningRate) },
+    { algorithm: 'best-response', strategy: pickBestResponse(playerId, strategies, lastRound, matrix, playerIds) },
+    { algorithm: 'fictitious-play', strategy: pickFictitiousPlay(playerId, strategies, history, matrix, playerIds) },
+    { algorithm: 'replicator-dynamics', strategy: pickReplicatorDynamics(playerId, strategies, replicatorState, lastRound, matrix, playerIds) },
+  ];
+
+  // Accumulate weights per strategy based on algorithm weights.
+  const stratWeights: Record<string, number> = {};
+  for (const s of strategies) stratWeights[s] = 0;
+
+  for (const p of proposals) {
+    const w = customConfig.weights[p.algorithm] || 0;
+    if (w > 0 && stratWeights[p.strategy] !== undefined) {
+      stratWeights[p.strategy] += w;
+    }
+  }
+
+  // Apply cooperation bias.
+  // cooperationBias > 0 boosts the FIRST strategy (cooperative).
+  // cooperationBias < 0 boosts the LAST strategy.
+  const bias = customConfig.cooperationBias;
+  if (bias > 0 && strategies.length > 0) {
+    stratWeights[strategies[0]] += bias;
+  } else if (bias < 0 && strategies.length > 0) {
+    stratWeights[strategies[strategies.length - 1]] += Math.abs(bias);
+  }
+
+  // Ensure no negative weights.
+  for (const s of strategies) {
+    stratWeights[s] = Math.max(stratWeights[s], 0);
+  }
+
+  // Weighted random selection.
+  const items = strategies;
+  const weights = strategies.map((s) => stratWeights[s]);
+  return weightedRandom(items, weights);
+}
+
+// ---------------------------------------------------------------------------
 // Convergence detection
 // ---------------------------------------------------------------------------
 
@@ -511,7 +577,11 @@ function generateInsights(
     'replicator-dynamics': `Strategies that performed well "grew" in popularity while underperforming ones faded away — similar to natural selection. Over time, the strongest approaches naturally rose to the top.`,
   };
 
-  insights.push(algoExplain[config.strategy] ?? 'Players used a strategic algorithm to make their choices each round.');
+  const strategyExplanation = algoExplain[config.strategy]
+    ?? (config.strategy.startsWith('custom-')
+      ? `Players used a custom blended strategy that combines elements of multiple algorithms. Each round, the system consulted several built-in approaches (like tit-for-tat, greedy, adaptive, and others), weighted their suggestions, and made a decision. This lets you fine-tune exactly how aggressive, cooperative, or exploratory the players behave.`
+      : 'Players used a strategic algorithm to make their choices each round.');
+  insights.push(strategyExplanation);
 
   // -- Convergence explanation --
   if (convergence.converged) {
@@ -817,6 +887,7 @@ const ALL_ALGORITHMS: SimulationConfig['strategy'][] = [
 export function runClientSimulation(
   analysis: GameAnalysis,
   config: SimulationConfig,
+  customStrategies?: CustomSimulationStrategy[],
 ): SimulationResult {
   const players = analysis.players;
   const playerIds = players.map((p) => p.id);
@@ -898,8 +969,23 @@ export function runClientSimulation(
           );
           break;
 
-        default:
-          pick = pickRandomStrategy(strats);
+        default: {
+          // Handle custom strategies (strategy id starts with 'custom-')
+          if (typeof algo === 'string' && algo.startsWith('custom-') && customStrategies) {
+            const customId = algo.slice('custom-'.length);
+            const customConfig = customStrategies.find((cs) => cs.id === customId);
+            if (customConfig) {
+              pick = pickCustomStrategy(
+                pid, strats, customConfig, lastRound, rounds,
+                matrix, playerIds, config.learningRate, replicatorStates[pid],
+              );
+            } else {
+              pick = pickRandomStrategy(strats);
+            }
+          } else {
+            pick = pickRandomStrategy(strats);
+          }
+        }
       }
 
       // Noise injection: with probability config.noise, override with a
