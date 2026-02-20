@@ -271,6 +271,7 @@ function SetupPanel({
   isSimulating,
   onConfigChange,
   onRunSimulation,
+  onCompareAll,
   onChangeScenario,
 }: {
   analysis: GameAnalysis | null;
@@ -278,6 +279,7 @@ function SetupPanel({
   isSimulating: boolean;
   onConfigChange: (partial: Partial<SimulationConfig>) => void;
   onRunSimulation: () => void;
+  onCompareAll: () => void;
   onChangeScenario: () => void;
 }) {
   const { setInput, setAnalysis, setIsAnalyzing, setError, addToHistory, customSimulationStrategies, addCustomSimulationStrategy, removeCustomSimulationStrategy } = useStore();
@@ -512,33 +514,51 @@ function SetupPanel({
         </div>
       </div>
 
-      {/* Run button */}
-      <motion.button
-        onClick={onRunSimulation}
-        disabled={!analysis || isSimulating}
-        className="mt-5 w-full py-3 rounded-xl bg-gradient-to-r from-[#6c5ce7] to-[#a29bfe] text-white
-          text-sm font-bold disabled:opacity-30 disabled:cursor-not-allowed transition-all
-          hover:shadow-[0_0_30px_rgba(108,92,231,0.4)] relative overflow-hidden"
-        whileHover={{ scale: 1.01 }}
-        whileTap={{ scale: 0.99 }}
-      >
-        {isSimulating ? (
+      {/* Run buttons */}
+      <div className="mt-5 flex gap-3">
+        <motion.button
+          onClick={onRunSimulation}
+          disabled={!analysis || isSimulating}
+          className="flex-1 py-3 rounded-xl bg-gradient-to-r from-[#6c5ce7] to-[#a29bfe] text-white
+            text-sm font-bold disabled:opacity-30 disabled:cursor-not-allowed transition-all
+            hover:shadow-[0_0_30px_rgba(108,92,231,0.4)] relative overflow-hidden"
+          whileHover={{ scale: 1.01 }}
+          whileTap={{ scale: 0.99 }}
+        >
+          {isSimulating ? (
+            <span className="flex items-center justify-center gap-2">
+              <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Simulating...
+            </span>
+          ) : (
+            <span className="flex items-center justify-center gap-2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <polygon points="5 3 19 12 5 21 5 3" />
+              </svg>
+              Run Simulation
+            </span>
+          )}
+        </motion.button>
+        <motion.button
+          onClick={onCompareAll}
+          disabled={!analysis || isSimulating}
+          className="py-3 px-5 rounded-xl border border-[#ffd43b]/30 bg-[#ffd43b]/5 text-[#ffd43b]
+            text-sm font-bold disabled:opacity-30 disabled:cursor-not-allowed transition-all
+            hover:bg-[#ffd43b]/10 hover:shadow-[0_0_20px_rgba(255,212,59,0.15)]"
+          whileHover={{ scale: 1.01 }}
+          whileTap={{ scale: 0.99 }}
+        >
           <span className="flex items-center justify-center gap-2">
-            <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 20V10" /><path d="M18 20V4" /><path d="M6 20v-4" />
             </svg>
-            Simulating...
+            Compare All
           </span>
-        ) : (
-          <span className="flex items-center justify-center gap-2">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-              <polygon points="5 3 19 12 5 21 5 3" />
-            </svg>
-            Run Simulation
-          </span>
-        )}
-      </motion.button>
+        </motion.button>
+      </div>
     </motion.div>
   );
 }
@@ -1720,6 +1740,270 @@ function InsightsPanel({ insights }: { insights: string[] }) {
 }
 
 // ---------------------------------------------------------------------------
+// Strategy Comparison Results — "Compare All" feature
+// ---------------------------------------------------------------------------
+
+interface ComparisonEntry {
+  strategyLabel: string;
+  strategyValue: string;
+  result: SimulationResult;
+}
+
+function StrategyComparisonPanel({
+  entries,
+  analysis,
+  onSelectResult,
+}: {
+  entries: ComparisonEntry[];
+  analysis: GameAnalysis;
+  onSelectResult: (entry: ComparisonEntry) => void;
+}) {
+  const players = analysis.players;
+  const playerIds = players.map((p) => p.id);
+
+  // For each player, find which strategy algorithm gave them the best total payoff
+  const bestPerPlayer = useMemo(() => {
+    return playerIds.map((pid) => {
+      const player = players.find((p) => p.id === pid)!;
+      const results = entries.map((entry) => {
+        const lastRound = entry.result.rounds[entry.result.rounds.length - 1];
+        const totalPayoff = lastRound?.cumulativePayoffs[pid] ?? 0;
+        const avgPayoff = entry.result.rounds.length > 0 ? totalPayoff / entry.result.rounds.length : 0;
+
+        // Also find the most-used strategy for this player under this algorithm
+        const freq: Record<string, number> = {};
+        for (const round of entry.result.rounds) {
+          const s = round.strategies[pid];
+          if (s) freq[s] = (freq[s] || 0) + 1;
+        }
+        const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]);
+        const favoriteStrategy = sorted[0]?.[0] ?? 'N/A';
+        const favoritePct = sorted[0] ? Math.round((sorted[0][1] / entry.result.rounds.length) * 100) : 0;
+
+        // Win rate
+        let wins = 0;
+        for (const round of entry.result.rounds) {
+          const myPayoff = round.payoffs[pid] ?? 0;
+          const max = Math.max(...playerIds.map((id) => round.payoffs[id] ?? 0));
+          if (myPayoff >= max) wins++;
+        }
+        const winRate = Math.round((wins / entry.result.rounds.length) * 100);
+
+        return {
+          ...entry,
+          totalPayoff,
+          avgPayoff,
+          favoriteStrategy,
+          favoritePct,
+          winRate,
+        };
+      });
+      results.sort((a, b) => b.totalPayoff - a.totalPayoff);
+      return { player, results };
+    });
+  }, [entries, playerIds, players]);
+
+  // Overall best algorithm: sum payoffs across all players
+  const overallBest = useMemo(() => {
+    const totals = entries.map((entry) => {
+      const lastRound = entry.result.rounds[entry.result.rounds.length - 1];
+      let sum = 0;
+      for (const pid of playerIds) {
+        sum += lastRound?.cumulativePayoffs[pid] ?? 0;
+      }
+      return { ...entry, totalWelfare: sum };
+    });
+    totals.sort((a, b) => b.totalWelfare - a.totalWelfare);
+    return totals;
+  }, [entries, playerIds]);
+
+  return (
+    <motion.div
+      className="rounded-2xl border border-[#ffd43b]/20 bg-gradient-to-br from-[#1a1a2e]/90 to-[#ffd43b]/5 backdrop-blur-sm p-5 space-y-5"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+    >
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 rounded-xl bg-[#ffd43b]/20 flex items-center justify-center">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffd43b" strokeWidth="2">
+            <path d="M12 20V10" /><path d="M18 20V4" /><path d="M6 20v-4" />
+          </svg>
+        </div>
+        <div>
+          <h3 className="text-sm font-bold text-[#ffd43b]">Strategy Comparison</h3>
+          <p className="text-[10px] text-[#e0e0ff]/40">
+            Ran {entries.length} algorithms with the same settings. Click any row to view its full simulation.
+          </p>
+        </div>
+      </div>
+
+      {/* Overall welfare ranking */}
+      <div>
+        <div className="text-[10px] uppercase tracking-wider text-[#e0e0ff]/30 mb-2 flex items-center gap-1.5">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10" /><path d="M2 12h20" /><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+          </svg>
+          Overall Ranking (Total Social Welfare)
+        </div>
+        <div className="space-y-1">
+          {overallBest.map((entry, i) => {
+            const maxWelfare = overallBest[0].totalWelfare || 1;
+            const pct = (entry.totalWelfare / maxWelfare) * 100;
+            const isBest = i === 0;
+            return (
+              <motion.button
+                key={entry.strategyValue}
+                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-all text-left ${
+                  isBest
+                    ? 'bg-[#ffd43b]/10 border border-[#ffd43b]/20'
+                    : 'bg-[#0a0a1a]/30 border border-transparent hover:border-[#25253e] hover:bg-[#0a0a1a]/50'
+                }`}
+                onClick={() => onSelectResult(entry)}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.04 }}
+              >
+                <div
+                  className="w-5 h-5 rounded-md flex items-center justify-center text-[9px] font-black shrink-0"
+                  style={{
+                    backgroundColor: isBest ? '#ffd43b20' : '#25253e',
+                    color: isBest ? '#ffd43b' : '#e0e0ff40',
+                  }}
+                >
+                  {i + 1}
+                </div>
+                <span className={`text-[11px] font-medium w-28 shrink-0 ${isBest ? 'text-[#ffd43b]' : 'text-[#e0e0ff]/70'}`}>
+                  {entry.strategyLabel}
+                </span>
+                <div className="flex-1 h-3 bg-[#0a0a1a]/60 rounded-md overflow-hidden">
+                  <motion.div
+                    className="h-full rounded-md"
+                    style={{ backgroundColor: isBest ? '#ffd43b' : '#6c5ce7', opacity: isBest ? 0.8 : 0.5 }}
+                    initial={{ width: 0 }}
+                    animate={{ width: `${Math.max(pct, 3)}%` }}
+                    transition={{ duration: 0.5, delay: i * 0.04 }}
+                  />
+                </div>
+                <span className={`text-[11px] font-bold font-mono w-14 text-right shrink-0 ${isBest ? 'text-[#ffd43b]' : 'text-[#e0e0ff]/50'}`}>
+                  {entry.totalWelfare.toFixed(1)}
+                </span>
+                {entry.result.convergence.converged && (
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#00b894" strokeWidth="3" className="shrink-0">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                )}
+              </motion.button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Per-player best strategy */}
+      {bestPerPlayer.map(({ player, results }) => {
+        const best = results[0];
+        const worst = results[results.length - 1];
+        return (
+          <motion.div
+            key={player.id}
+            className="rounded-xl border border-[#25253e] bg-[#0a0a1a]/30 p-4"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+          >
+            <div className="flex items-center gap-2 mb-3">
+              <div
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-sm"
+                style={{ backgroundColor: `${player.color}20` }}
+              >
+                {player.emoji}
+              </div>
+              <div>
+                <span className="text-xs font-bold" style={{ color: player.color }}>
+                  {player.name}
+                </span>
+                <span className="text-[10px] text-[#e0e0ff]/30 ml-2">Best algorithm for this player</span>
+              </div>
+            </div>
+
+            {/* Best result highlight */}
+            <div className="flex items-center gap-3 mb-3 p-2.5 rounded-lg bg-[#00b894]/5 border border-[#00b894]/20">
+              <div className="w-6 h-6 rounded-md bg-[#ffd43b]/20 flex items-center justify-center">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="#ffd43b" stroke="none">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <div className="text-[11px] font-bold text-[#00b894]">{best.strategyLabel}</div>
+                <div className="text-[9px] text-[#e0e0ff]/40">
+                  Avg {best.avgPayoff.toFixed(2)}/round &middot; {best.winRate}% win rate &middot; Favorite move: {best.favoriteStrategy} ({best.favoritePct}%)
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-sm font-black font-mono" style={{ color: player.color }}>
+                  {best.totalPayoff.toFixed(1)}
+                </div>
+                <div className="text-[8px] text-[#e0e0ff]/30">total</div>
+              </div>
+            </div>
+
+            {/* All results table for this player */}
+            <div className="space-y-1">
+              {results.map((r, i) => {
+                const maxPayoff = results[0].totalPayoff || 1;
+                const pct = (r.totalPayoff / maxPayoff) * 100;
+                const isBest = i === 0;
+                return (
+                  <button
+                    key={r.strategyValue}
+                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left transition-all ${
+                      isBest ? 'bg-[#00b894]/5' : 'hover:bg-[#0a0a1a]/40'
+                    }`}
+                    onClick={() => onSelectResult(r)}
+                  >
+                    <span className="text-[9px] text-[#e0e0ff]/30 w-4 shrink-0">{i + 1}</span>
+                    <span className={`text-[10px] w-24 shrink-0 ${isBest ? 'font-bold text-[#00b894]' : 'text-[#e0e0ff]/50'}`}>
+                      {r.strategyLabel}
+                    </span>
+                    <div className="flex-1 h-2 bg-[#25253e]/50 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{
+                          width: `${Math.max(pct, 3)}%`,
+                          backgroundColor: isBest ? player.color : `${player.color}60`,
+                        }}
+                      />
+                    </div>
+                    <span className="text-[10px] font-mono text-[#e0e0ff]/50 w-12 text-right shrink-0">
+                      {r.totalPayoff.toFixed(1)}
+                    </span>
+                    <span className="text-[9px] text-[#e0e0ff]/30 w-10 text-right shrink-0">
+                      {r.winRate}%
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Gap insight */}
+            {results.length >= 2 && best.totalPayoff > worst.totalPayoff * 1.1 && (
+              <div className="mt-2 text-[10px] text-[#e0e0ff]/40 leading-relaxed">
+                <span style={{ color: player.color }} className="font-medium">{best.strategyLabel}</span> outperformed{' '}
+                <span className="text-[#e0e0ff]/60">{worst.strategyLabel}</span> by{' '}
+                <span className="font-mono font-medium text-[#e0e0ff]/60">
+                  {((best.totalPayoff / worst.totalPayoff - 1) * 100).toFixed(0)}%
+                </span>{' '}
+                for {player.name}.
+              </div>
+            )}
+          </motion.div>
+        );
+      })}
+    </motion.div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main SimulationView
 // ---------------------------------------------------------------------------
 
@@ -1745,10 +2029,61 @@ export default function SimulationView() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
 
+  // Compare-all state
+  const [comparisonEntries, setComparisonEntries] = useState<ComparisonEntry[] | null>(null);
+
+  const handleCompareAll = useCallback(() => {
+    if (!analysis || isSimulating) return;
+    setIsSimulating(true);
+    setError(null);
+    setSimulationResult(null);
+    setComparisonEntries(null);
+
+    try {
+      const builtInStrategies: { value: string; label: string }[] = STRATEGY_OPTIONS.map((o) => ({
+        value: o.value,
+        label: o.label,
+      }));
+      // Also include custom strategies
+      const customEntries = customSimulationStrategies.map((cs) => ({
+        value: `custom-${cs.id}`,
+        label: cs.name,
+      }));
+      const allStrategies = [...builtInStrategies, ...customEntries];
+
+      const entries: ComparisonEntry[] = allStrategies.map((strat) => {
+        const config: SimulationConfig = {
+          ...simulationConfig,
+          strategy: strat.value as SimulationConfig['strategy'],
+        };
+        const result = runClientSimulation(analysis, config, customSimulationStrategies);
+        return {
+          strategyLabel: strat.label,
+          strategyValue: strat.value,
+          result,
+        };
+      });
+
+      setComparisonEntries(entries);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Comparison failed');
+    } finally {
+      setIsSimulating(false);
+    }
+  }, [analysis, simulationConfig, customSimulationStrategies, isSimulating, setIsSimulating, setError, setSimulationResult]);
+
+  const handleSelectComparisonResult = useCallback((entry: ComparisonEntry) => {
+    setSimulationResult(entry.result);
+    setSimulationConfig({ strategy: entry.strategyValue as SimulationConfig['strategy'] });
+    setDisplayedRounds(entry.result.rounds.length);
+    setIsPlaying(false);
+  }, [setSimulationResult, setSimulationConfig]);
+
   const handleRunSimulation = useCallback(() => {
     if (!analysis || isSimulating) return;
     setIsSimulating(true);
     setError(null);
+    setComparisonEntries(null);
 
     try {
       const result = runClientSimulation(analysis, simulationConfig, customSimulationStrategies);
@@ -1795,6 +2130,7 @@ export default function SimulationView() {
   const handleChangeScenario = useCallback(() => {
     setAnalysis(null);
     setSimulationResult(null);
+    setComparisonEntries(null);
     setShowChangeScenario(false);
     setDisplayedRounds(0);
     setIsPlaying(false);
@@ -1836,8 +2172,20 @@ export default function SimulationView() {
         isSimulating={isSimulating}
         onConfigChange={handleConfigChange}
         onRunSimulation={handleRunSimulation}
+        onCompareAll={handleCompareAll}
         onChangeScenario={handleChangeScenario}
       />
+
+      {/* Strategy Comparison Results */}
+      <AnimatePresence>
+        {comparisonEntries && (
+          <StrategyComparisonPanel
+            entries={comparisonEntries}
+            analysis={analysis!}
+            onSelectResult={handleSelectComparisonResult}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Playback Controls */}
       {simulationResult && (
