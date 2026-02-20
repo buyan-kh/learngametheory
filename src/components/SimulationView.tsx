@@ -1051,6 +1051,65 @@ function StrategyEvolution({
           </div>
         </div>
       )}
+
+      {/* Per-player strategy narratives */}
+      {result.strategyNarrative && Object.keys(result.strategyNarrative).length > 0 && (
+        <div className="mt-4 pt-3 border-t border-[#25253e]/60 space-y-2">
+          <div className="text-[10px] text-[#e0e0ff]/30 mb-2 flex items-center gap-1.5">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+            </svg>
+            Player Strategy Breakdown
+          </div>
+          {playerIds.map((pid, i) => {
+            const text = result.strategyNarrative[pid];
+            if (!text) return null;
+            const player = result.analysis.players.find((p) => p.id === pid);
+            return (
+              <motion.div
+                key={pid}
+                className="flex items-start gap-3 p-3 rounded-lg bg-[#0a0a1a]/40 border border-[#25253e]/40"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 + i * 0.08 }}
+              >
+                <div
+                  className="w-7 h-7 rounded-lg flex items-center justify-center text-sm shrink-0 mt-0.5"
+                  style={{ backgroundColor: `${player?.color ?? '#6c5ce7'}15` }}
+                >
+                  {player?.emoji ?? '?'}
+                </div>
+                <p className="text-[11px] text-[#e0e0ff]/60 leading-relaxed">{text}</p>
+              </motion.div>
+            );
+          })}
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Narrative Story Panel — plain-English summary of the simulation
+// ---------------------------------------------------------------------------
+
+function NarrativePanel({ narrative }: { narrative: string }) {
+  if (!narrative) return null;
+
+  return (
+    <motion.div
+      className="rounded-2xl border border-[#6c5ce7]/20 bg-gradient-to-br from-[#1a1a2e]/90 to-[#6c5ce7]/5 backdrop-blur-sm p-5"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, delay: 0.25 }}
+    >
+      <h3 className="text-xs font-bold text-[#a29bfe] mb-3 flex items-center gap-2">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+        </svg>
+        What Happened
+      </h3>
+      <p className="text-[12px] text-[#e0e0ff]/70 leading-[1.7]">{narrative}</p>
     </motion.div>
   );
 }
@@ -1588,6 +1647,11 @@ export default function SimulationView() {
             {/* Convergence celebration */}
             {playbackComplete && simulationResult!.convergence.converged && (
               <ConvergenceBurst />
+            )}
+
+            {/* What Happened — narrative story */}
+            {playbackComplete && simulationResult!.narrative && (
+              <NarrativePanel narrative={simulationResult!.narrative} />
             )}
 
             {/* Stats and insights */}

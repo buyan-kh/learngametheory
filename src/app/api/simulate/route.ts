@@ -269,6 +269,8 @@ function runSimulation(
     rounds,
     convergence,
     insights,
+    narrative: '',
+    strategyNarrative: {},
   };
 }
 

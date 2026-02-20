@@ -499,84 +499,293 @@ function generateInsights(
   const insights: string[] = [];
   const nameOf = (id: string) => players.find((p) => p.id === id)?.name ?? id;
 
-  // 1. Convergence
+  // -- How the simulation works (plain English) --
+  const algoExplain: Record<string, string> = {
+    'random': `In this simulation, every player picked their move completely at random each round — like flipping a coin. This helps us see what happens when nobody is trying to be strategic at all.`,
+    'greedy': `Each player always went with whatever move worked best for them last time. It's the simplest "smart" strategy: just repeat what paid off. The downside? If everyone does this, they can get stuck in a rut.`,
+    'tit-for-tat': `Players started off cooperatively, then copied whatever the other side did last round. This is the classic "I'll be nice if you're nice" approach — it rewards cooperation but punishes betrayal immediately.`,
+    'adaptive': `Players learned from experience. Early on they tried different things, and over time they leaned harder toward moves that had been paying off. Think of it like a player who starts cautious and gradually figures out what works.`,
+    'mixed': `Each player used a completely different decision-making approach. This simulates a more realistic world where not everyone thinks the same way — some are cautious, some are aggressive, some are unpredictable.`,
+    'best-response': `Every round, each player looked at what their opponents just did and picked the absolute best counter-move. It's a very reactive approach — like always trying to one-up the other side based on their last action.`,
+    'fictitious-play': `Players kept a mental tally of everything their opponents had done across all rounds, then picked the best response to those overall patterns. It's a more thoughtful approach than just reacting to the last round.`,
+    'replicator-dynamics': `Strategies that performed well "grew" in popularity while underperforming ones faded away — similar to natural selection. Over time, the strongest approaches naturally rose to the top.`,
+  };
+
+  insights.push(algoExplain[config.strategy] ?? 'Players used a strategic algorithm to make their choices each round.');
+
+  // -- Convergence explanation --
   if (convergence.converged) {
-    insights.push(
-      `The game converged to a stable state at round ${convergence.equilibriumRound}.`,
-    );
-    for (const pid of playerIds) {
-      insights.push(
-        `${nameOf(pid)} settled on "${convergence.finalStrategies[pid]}".`,
-      );
+    const eqRound = convergence.equilibriumRound!;
+    const pctThrough = Math.round((eqRound / rounds.length) * 100);
+    if (pctThrough <= 25) {
+      insights.push(`The players figured things out quickly. By round ${eqRound} (early in the game), everyone settled into a stable pattern and stopped changing their approach. This suggests the game has a strong, obvious equilibrium.`);
+    } else if (pctThrough <= 60) {
+      insights.push(`After some initial back-and-forth, the players found a stable arrangement around round ${eqRound}. It took some experimentation, but eventually everyone settled into a consistent pattern.`);
+    } else {
+      insights.push(`It took most of the game for things to stabilize. Players kept adjusting their strategies until round ${eqRound} before finally settling down. This suggests the game's equilibrium isn't immediately obvious — it takes time to discover.`);
     }
   } else {
-    insights.push(
-      'The game did not converge to a stable equilibrium within the simulation window.',
-    );
+    insights.push(`The players never settled into a stable pattern — they kept switching strategies right up to the end. This can mean the game doesn't have a clear "best" outcome, or that the players are caught in a cycle where every move invites a counter-move.`);
   }
 
-  // 2. Dominant player (highest cumulative payoff)
+  // -- Who came out on top --
   if (rounds.length > 0) {
     const last = rounds[rounds.length - 1];
-    let bestId = playerIds[0];
-    let bestPay = -Infinity;
-    for (const pid of playerIds) {
-      if (last.cumulativePayoffs[pid] > bestPay) {
-        bestPay = last.cumulativePayoffs[pid];
-        bestId = pid;
+    const scores = playerIds.map((pid) => ({ pid, score: last.cumulativePayoffs[pid] }));
+    scores.sort((a, b) => b.score - a.score);
+    const best = scores[0];
+    const worst = scores[scores.length - 1];
+
+    if (scores.length === 2) {
+      const gap = best.score - worst.score;
+      const avgScore = (best.score + worst.score) / 2;
+      const gapPct = avgScore > 0 ? (gap / avgScore) * 100 : 0;
+
+      if (gapPct < 10) {
+        insights.push(`This was a very close contest. ${nameOf(best.pid)} and ${nameOf(worst.pid)} ended up with nearly identical scores, suggesting neither side had a clear advantage. The game rewarded both players roughly equally.`);
+      } else if (gapPct < 40) {
+        insights.push(`${nameOf(best.pid)} came out ahead, but not by a huge margin. ${nameOf(worst.pid)} stayed competitive throughout. The difference suggests a slight strategic edge rather than total domination.`);
+      } else {
+        insights.push(`${nameOf(best.pid)} clearly dominated this simulation, pulling far ahead of ${nameOf(worst.pid)}. This large gap usually means one player's strategy was significantly better suited to this particular game setup.`);
       }
+    } else {
+      insights.push(`${nameOf(best.pid)} came out on top overall, while ${nameOf(worst.pid)} ended with the lowest score. In games with multiple players, the dynamics are more complex — alliances and rivalries can shift the balance.`);
     }
-    insights.push(
-      `${nameOf(bestId)} achieved the highest total payoff of ${bestPay.toFixed(1)}.`,
-    );
   }
 
-  // 3. Strategy frequency per player
+  // -- Strategy switching patterns --
+  let totalSwitches = 0;
   for (const pid of playerIds) {
+    for (let i = 1; i < rounds.length; i++) {
+      if (rounds[i].strategies[pid] !== rounds[i - 1].strategies[pid]) {
+        totalSwitches++;
+      }
+    }
+  }
+  const switchRate = totalSwitches / ((rounds.length - 1) * playerIds.length);
+
+  if (switchRate < 0.1) {
+    insights.push(`Players were very consistent with their strategies, rarely changing their approach. This stability suggests they quickly found moves they were comfortable with and stuck with them.`);
+  } else if (switchRate < 0.3) {
+    insights.push(`Players occasionally switched strategies when they saw an opportunity or felt pressure, but mostly stuck to familiar approaches. This moderate level of experimentation is typical of games where players are learning.`);
+  } else if (switchRate < 0.6) {
+    insights.push(`There was a lot of strategic back-and-forth — players frequently changed their approach in response to what others were doing. This makes the game feel dynamic, with no single "obvious" best move.`);
+  } else {
+    insights.push(`Strategies were extremely volatile, with players constantly changing their moves. This level of chaos suggests the game is highly reactive — every move invites a counter-move, creating an unpredictable arms race.`);
+  }
+
+  // -- Noise explanation --
+  if (config.noise > 0.2) {
+    insights.push(`The high randomness setting means players sometimes made "mistakes" or unexpected moves. This simulates real-world unpredictability — people don't always act perfectly rationally. It makes outcomes less predictable but often more realistic.`);
+  } else if (config.noise > 0) {
+    insights.push(`A small amount of randomness was mixed in, so players occasionally deviated from their usual pattern. This makes the simulation more realistic — in real life, people sometimes make surprising choices.`);
+  }
+
+  // -- Nash equilibrium context --
+  if (analysis.nashEquilibrium) {
+    insights.push(`For context, game theory predicts this scenario has a Nash Equilibrium — a situation where no player can improve their outcome by changing strategy alone. Here's what theory says: "${analysis.nashEquilibrium}"`);
+  }
+
+  return insights;
+}
+
+// ---------------------------------------------------------------------------
+// Narrative generation — plain-English story of the simulation
+// ---------------------------------------------------------------------------
+
+function generateNarrative(
+  rounds: SimulationRound[],
+  playerIds: string[],
+  players: GameAnalysis['players'],
+  convergence: SimulationResult['convergence'],
+  config: SimulationConfig,
+): string {
+  const nameOf = (id: string) => players.find((p) => p.id === id)?.name ?? id;
+  const parts: string[] = [];
+
+  // Opening
+  const names = playerIds.map(nameOf);
+  if (names.length === 2) {
+    parts.push(`${names[0]} and ${names[1]} faced off over ${rounds.length} rounds.`);
+  } else {
+    parts.push(`${names.slice(0, -1).join(', ')} and ${names[names.length - 1]} competed over ${rounds.length} rounds.`);
+  }
+
+  // Early game (first 25%)
+  const earlyEnd = Math.min(Math.ceil(rounds.length * 0.25), rounds.length);
+  const earlySwitches: Record<string, number> = {};
+  for (const pid of playerIds) {
+    earlySwitches[pid] = 0;
+    for (let i = 1; i < earlyEnd; i++) {
+      if (rounds[i].strategies[pid] !== rounds[i - 1].strategies[pid]) {
+        earlySwitches[pid]++;
+      }
+    }
+  }
+  const mostExperimental = playerIds.reduce((a, b) => (earlySwitches[a] > earlySwitches[b] ? a : b));
+  const leastExperimental = playerIds.reduce((a, b) => (earlySwitches[a] < earlySwitches[b] ? a : b));
+
+  if (earlySwitches[mostExperimental] > 2) {
+    parts.push(`In the opening rounds, ${nameOf(mostExperimental)} experimented with different approaches, trying to find what works.`);
+  } else {
+    parts.push(`Both sides started with a clear plan from the beginning, committing to their chosen strategies early on.`);
+  }
+  if (mostExperimental !== leastExperimental && earlySwitches[leastExperimental] === 0) {
+    parts.push(`Meanwhile, ${nameOf(leastExperimental)} stayed consistent from the start.`);
+  }
+
+  // Mid game — who was winning?
+  const midPoint = Math.floor(rounds.length / 2);
+  if (midPoint > 0 && midPoint < rounds.length) {
+    const midRound = rounds[midPoint];
+    const midScores = playerIds.map((pid) => ({ pid, score: midRound.cumulativePayoffs[pid] }));
+    midScores.sort((a, b) => b.score - a.score);
+    const leader = midScores[0];
+    const trailer = midScores[midScores.length - 1];
+    const gap = leader.score - trailer.score;
+    const avg = (leader.score + trailer.score) / 2;
+
+    if (avg > 0 && (gap / avg) > 0.3) {
+      parts.push(`By the halfway point, ${nameOf(leader.pid)} had pulled ahead with a clear lead.`);
+    } else {
+      parts.push(`At the halfway mark, the scores were still close — neither side had a decisive advantage.`);
+    }
+  }
+
+  // Late game / convergence
+  if (convergence.converged) {
+    const eqRound = convergence.equilibriumRound!;
+    const strategies = Object.entries(convergence.finalStrategies)
+      .map(([pid, s]) => `${nameOf(pid)} locked in "${s}"`)
+      .join(' and ');
+    parts.push(`By round ${eqRound}, the dust settled: ${strategies}. From that point on, nobody had any reason to change — they'd found their equilibrium.`);
+  } else {
+    parts.push(`Even by the final round, the players were still jockeying for position. No stable pattern emerged — this game kept everyone on their toes until the very end.`);
+  }
+
+  // Final outcome
+  if (rounds.length > 0) {
+    const last = rounds[rounds.length - 1];
+    const scores = playerIds.map((pid) => ({ pid, score: last.cumulativePayoffs[pid] }));
+    scores.sort((a, b) => b.score - a.score);
+
+    if (playerIds.length === 2) {
+      const gap = scores[0].score - scores[1].score;
+      const avg = (scores[0].score + scores[1].score) / 2;
+      if (avg > 0 && (gap / avg) < 0.05) {
+        parts.push(`In the end, it was essentially a draw — both sides came away with similar results.`);
+      } else {
+        parts.push(`When the final scores were tallied, ${nameOf(scores[0].pid)} came out ahead.`);
+      }
+    } else {
+      parts.push(`In the final standings, ${nameOf(scores[0].pid)} finished first.`);
+    }
+  }
+
+  return parts.join(' ');
+}
+
+// ---------------------------------------------------------------------------
+// Per-player strategy narrative
+// ---------------------------------------------------------------------------
+
+function generateStrategyNarrative(
+  rounds: SimulationRound[],
+  playerIds: string[],
+  players: GameAnalysis['players'],
+  convergence: SimulationResult['convergence'],
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  const nameOf = (id: string) => players.find((p) => p.id === id)?.name ?? id;
+
+  for (const pid of playerIds) {
+    const parts: string[] = [];
+    const name = nameOf(pid);
+
+    // Strategy frequency
     const freq: Record<string, number> = {};
     for (const round of rounds) {
       const s = round.strategies[pid];
       freq[s] = (freq[s] || 0) + 1;
     }
     const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]);
-    if (sorted.length > 0) {
-      const pct = ((sorted[0][1] / rounds.length) * 100).toFixed(0);
-      insights.push(
-        `${nameOf(pid)} used "${sorted[0][0]}" most often (${pct}% of rounds).`,
-      );
+
+    if (sorted.length === 1) {
+      parts.push(`${name} used "${sorted[0][0]}" every single round — completely committed to one approach from start to finish.`);
+    } else if (sorted.length === 2) {
+      const mainPct = Math.round((sorted[0][1] / rounds.length) * 100);
+      if (mainPct >= 80) {
+        parts.push(`${name} mostly relied on "${sorted[0][0]}", only occasionally switching to "${sorted[1][0]}" when the situation called for it.`);
+      } else {
+        parts.push(`${name} alternated between "${sorted[0][0]}" and "${sorted[1][0]}", using both approaches throughout the game.`);
+      }
+    } else {
+      parts.push(`${name} tried ${sorted.length} different strategies, with "${sorted[0][0]}" being the go-to choice.`);
     }
+
+    // When did they switch?
+    let switches = 0;
+    let firstSwitch: number | null = null;
+    let lastSwitch: number | null = null;
+    for (let i = 1; i < rounds.length; i++) {
+      if (rounds[i].strategies[pid] !== rounds[i - 1].strategies[pid]) {
+        switches++;
+        if (firstSwitch === null) firstSwitch = i + 1;
+        lastSwitch = i + 1;
+      }
+    }
+
+    if (switches === 0) {
+      parts.push(`They never wavered or changed course.`);
+    } else if (switches <= 3) {
+      parts.push(`They only changed strategy a few times, suggesting they found a comfortable approach early.`);
+    } else {
+      const earlyHalf = rounds.slice(0, Math.floor(rounds.length / 2));
+      const lateHalf = rounds.slice(Math.floor(rounds.length / 2));
+      let earlySwitches = 0;
+      let lateSwitches = 0;
+      for (let i = 1; i < earlyHalf.length; i++) {
+        if (earlyHalf[i].strategies[pid] !== earlyHalf[i - 1].strategies[pid]) earlySwitches++;
+      }
+      for (let i = 1; i < lateHalf.length; i++) {
+        if (lateHalf[i].strategies[pid] !== lateHalf[i - 1].strategies[pid]) lateSwitches++;
+      }
+
+      if (earlySwitches > lateSwitches * 2) {
+        parts.push(`They experimented a lot early on, then settled down as they figured out what works.`);
+      } else if (lateSwitches > earlySwitches * 2) {
+        parts.push(`They started steady but became more reactive later, perhaps responding to changes from other players.`);
+      } else {
+        parts.push(`They kept adjusting throughout the game, never fully committing to a single approach.`);
+      }
+    }
+
+    // Final strategy and convergence
+    if (convergence.converged && convergence.finalStrategies[pid]) {
+      parts.push(`Ultimately, they settled on "${convergence.finalStrategies[pid]}" as their final answer.`);
+    }
+
+    // Performance trajectory
+    if (rounds.length >= 4) {
+      const q1 = rounds[Math.floor(rounds.length * 0.25)].cumulativePayoffs[pid];
+      const q3 = rounds[Math.floor(rounds.length * 0.75)].cumulativePayoffs[pid];
+      const final = rounds[rounds.length - 1].cumulativePayoffs[pid];
+      const earlyAvg = q1 / Math.floor(rounds.length * 0.25);
+      const lateAvg = (final - q3) / (rounds.length - Math.floor(rounds.length * 0.75));
+
+      if (lateAvg > earlyAvg * 1.3) {
+        parts.push(`Their results improved over time — they got better as the game went on.`);
+      } else if (earlyAvg > lateAvg * 1.3) {
+        parts.push(`They started strong but their performance declined as opponents adapted.`);
+      } else {
+        parts.push(`Their performance stayed fairly consistent throughout the game.`);
+      }
+    }
+
+    result[pid] = parts.join(' ');
   }
 
-  // 4. Nash equilibrium comparison
-  if (analysis.nashEquilibrium) {
-    insights.push(`Nash Equilibrium reference: ${analysis.nashEquilibrium}`);
-  }
-
-  // 5. Noise note
-  if (config.noise > 0) {
-    insights.push(
-      `With ${(config.noise * 100).toFixed(0)}% noise, random deviations occasionally disrupted strategy patterns.`,
-    );
-  }
-
-  // 6. Algorithm note
-  const algoDescriptions: Record<string, string> = {
-    'random': 'Players chose strategies uniformly at random each round.',
-    'greedy': 'Players greedily picked the best-performing strategy from the previous round.',
-    'tit-for-tat': 'Players mirrored their opponents\' previous moves (tit-for-tat).',
-    'adaptive': 'Players adapted over time, weighting strategies by historical payoff performance.',
-    'mixed': 'In mixed mode each player used a different algorithm, simulating a heterogeneous population.',
-    'best-response': 'Players used best-response dynamics, always picking the payoff-maximizing strategy against opponents\' last choices.',
-    'fictitious-play': 'Players used fictitious play, best-responding to the empirical frequency of opponent strategies.',
-    'replicator-dynamics': 'Players used replicator dynamics, evolving a probability distribution over strategies based on relative payoff fitness.',
-  };
-
-  const desc = algoDescriptions[config.strategy];
-  if (desc) {
-    insights.push(desc);
-  }
-
-  return insights;
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -722,6 +931,8 @@ export function runClientSimulation(
 
   const convergence = detectConvergence(rounds, playerIds);
   const insights = generateInsights(rounds, playerIds, players, convergence, config, analysis);
+  const narrative = generateNarrative(rounds, playerIds, players, convergence, config);
+  const strategyNarrative = generateStrategyNarrative(rounds, playerIds, players, convergence);
 
   return {
     id: `sim_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -731,5 +942,7 @@ export function runClientSimulation(
     rounds,
     convergence,
     insights,
+    narrative,
+    strategyNarrative,
   };
 }

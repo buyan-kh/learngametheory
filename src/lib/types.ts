@@ -92,6 +92,8 @@ export interface SimulationResult {
     finalStrategies: Record<string, string>;
   };
   insights: string[];
+  narrative: string;
+  strategyNarrative: Record<string, string>;
 }
 
 // Comparison types
