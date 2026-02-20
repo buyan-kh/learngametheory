@@ -1,7 +1,7 @@
 'use client';
 
-import { useRef, useState, useCallback, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { useRef, useState, useCallback, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '@/lib/store';
 import PixelCharacter from './PixelCharacter';
 import { Connection, Player } from '@/lib/types';
@@ -20,7 +20,15 @@ const CONNECTION_DASHES = {
   negotiation: '12,4,4,4',
 };
 
-function ConnectionLine({ conn, players }: { conn: Connection; players: Player[] }) {
+function ConnectionLine({
+  conn,
+  players,
+  index,
+}: {
+  conn: Connection;
+  players: Player[];
+  index: number;
+}) {
   const from = players.find((p) => p.id === conn.from);
   const to = players.find((p) => p.id === conn.to);
   if (!from || !to) return null;
@@ -31,27 +39,87 @@ function ConnectionLine({ conn, players }: { conn: Connection; players: Player[]
   const y2 = to.position.y + 24;
   const mx = (x1 + x2) / 2;
   const my = (y1 + y2) / 2;
+  const color = CONNECTION_COLORS[conn.type];
+  const isStrong = conn.strength > 0.6;
+  const baseWidth = 2 + conn.strength * 3;
+
+  // Deterministic animation durations based on index
+  const dotDur = 1.8 + (index % 5) * 0.3;
+  const pulseDur = 2 + (index % 4) * 0.5;
 
   return (
     <g>
+      {/* Glow layer for strong connections */}
+      {isStrong && (
+        <line
+          x1={x1}
+          y1={y1}
+          x2={x2}
+          y2={y2}
+          stroke={color}
+          strokeWidth={baseWidth + 8}
+          opacity={0.12}
+          filter="url(#connection-glow)"
+        />
+      )}
+
+      {/* Base connection line */}
       <line
         x1={x1}
         y1={y1}
         x2={x2}
         y2={y2}
-        stroke={CONNECTION_COLORS[conn.type]}
-        strokeWidth={2 + conn.strength * 3}
+        stroke={color}
+        strokeWidth={baseWidth}
         strokeDasharray={CONNECTION_DASHES[conn.type]}
         opacity={0.6 + conn.strength * 0.4}
       />
-      {/* Arrow head */}
+
+      {/* Animated flowing dot along path */}
+      <circle r={3} fill={color} opacity={0.9}>
+        <animateMotion
+          path={`M${x1},${y1} L${x2},${y2}`}
+          dur={`${dotDur}s`}
+          repeatCount="indefinite"
+        />
+      </circle>
+
+      {/* Second dot going reverse for strong connections */}
+      {isStrong && (
+        <circle r={2.5} fill={color} opacity={0.6}>
+          <animateMotion
+            path={`M${x2},${y2} L${x1},${y1}`}
+            dur={`${dotDur * 0.8}s`}
+            repeatCount="indefinite"
+          />
+        </circle>
+      )}
+
+      {/* Pulsing midpoint - solid center */}
+      <circle cx={mx} cy={my} r={4} fill={color} opacity={0.9} />
+      {/* Pulsing midpoint - expanding ring */}
       <circle
         cx={mx}
         cy={my}
-        r={4}
-        fill={CONNECTION_COLORS[conn.type]}
-      />
-      {/* Label */}
+        fill="none"
+        stroke={color}
+        strokeWidth={1.5}
+      >
+        <animate
+          attributeName="r"
+          values="4;14;4"
+          dur={`${pulseDur}s`}
+          repeatCount="indefinite"
+        />
+        <animate
+          attributeName="opacity"
+          values="0.6;0;0.6"
+          dur={`${pulseDur}s`}
+          repeatCount="indefinite"
+        />
+      </circle>
+
+      {/* Label background */}
       <rect
         x={mx - conn.label.length * 3.5 - 4}
         y={my - 22}
@@ -59,15 +127,16 @@ function ConnectionLine({ conn, players }: { conn: Connection; players: Player[]
         height={16}
         rx={4}
         fill="#1a1a2e"
-        stroke={CONNECTION_COLORS[conn.type]}
+        stroke={color}
         strokeWidth={1}
         opacity={0.9}
       />
+      {/* Label text */}
       <text
         x={mx}
         y={my - 11}
         textAnchor="middle"
-        fill={CONNECTION_COLORS[conn.type]}
+        fill={color}
         fontSize={10}
         fontFamily="monospace"
       >
@@ -77,11 +146,38 @@ function ConnectionLine({ conn, players }: { conn: Connection; players: Player[]
   );
 }
 
+const FLOAT_ANIMATIONS = ['gb-float-1', 'gb-float-2', 'gb-float-3'];
+
 export default function GameBoard() {
-  const { analysis, selectedPlayer, setSelectedPlayer, updatePlayerPosition } = useStore();
+  const { analysis, selectedPlayer, setSelectedPlayer, updatePlayerPosition } =
+    useStore();
   const boardRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [hoveredPlayer, setHoveredPlayer] = useState<string | null>(null);
+  const [ripple, setRipple] = useState<{
+    x: number;
+    y: number;
+    color: string;
+    key: number;
+  } | null>(null);
+
+  // Generate ambient particles deterministically from player colors
+  const particles = useMemo(() => {
+    if (!analysis) return [];
+    const colors = analysis.players.map((p) => p.color);
+    return Array.from({ length: 14 }, (_, i) => ({
+      id: i,
+      left: `${5 + ((i * 37) % 90)}%`,
+      top: `${8 + ((i * 31) % 82)}%`,
+      size: 2 + (i % 3),
+      color: colors[i % colors.length],
+      animation: FLOAT_ANIMATIONS[i % 3],
+      duration: 6 + (i % 5) * 2,
+      delay: (i * 0.7) % 5,
+      opacity: 0.2 + (i % 4) * 0.08,
+    }));
+  }, [analysis]);
 
   const handleMouseDown = useCallback(
     (playerId: string, e: React.MouseEvent) => {
@@ -104,8 +200,14 @@ export default function GameBoard() {
       if (!dragging || !boardRef.current) return;
       const rect = boardRef.current.getBoundingClientRect();
       updatePlayerPosition(dragging, {
-        x: Math.max(0, Math.min(rect.width - 48, e.clientX - rect.left - dragOffset.x)),
-        y: Math.max(0, Math.min(rect.height - 48, e.clientY - rect.top - dragOffset.y)),
+        x: Math.max(
+          0,
+          Math.min(rect.width - 48, e.clientX - rect.left - dragOffset.x)
+        ),
+        y: Math.max(
+          0,
+          Math.min(rect.height - 48, e.clientY - rect.top - dragOffset.y)
+        ),
       });
     },
     [dragging, dragOffset, updatePlayerPosition]
@@ -114,6 +216,19 @@ export default function GameBoard() {
   const handleMouseUp = useCallback(() => {
     setDragging(null);
   }, []);
+
+  const handlePlayerClick = useCallback(
+    (player: Player) => {
+      setSelectedPlayer(selectedPlayer === player.id ? null : player.id);
+      setRipple({
+        x: player.position.x + 24,
+        y: player.position.y + 24,
+        color: player.color,
+        key: Date.now(),
+      });
+    },
+    [selectedPlayer, setSelectedPlayer]
+  );
 
   if (!analysis) return null;
 
@@ -124,7 +239,9 @@ export default function GameBoard() {
         {Object.entries(CONNECTION_COLORS).map(([type, color]) => (
           <div key={type} className="flex items-center gap-1.5">
             <div className="w-4 h-0.5" style={{ backgroundColor: color }} />
-            <span className="text-[10px] uppercase tracking-wider opacity-70">{type}</span>
+            <span className="text-[10px] uppercase tracking-wider opacity-70">
+              {type}
+            </span>
           </div>
         ))}
       </div>
@@ -136,12 +253,91 @@ export default function GameBoard() {
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
       >
-        {/* SVG layer for connections */}
+        {/* Ambient floating particles */}
+        {particles.map((p) => (
+          <div
+            key={p.id}
+            className="absolute rounded-full pointer-events-none gb-particle"
+            style={{
+              left: p.left,
+              top: p.top,
+              width: p.size,
+              height: p.size,
+              backgroundColor: p.color,
+              opacity: p.opacity,
+              animation: `${p.animation} ${p.duration}s ease-in-out ${p.delay}s infinite`,
+            }}
+          />
+        ))}
+
+        {/* SVG layer for territories + connections */}
         <svg className="absolute inset-0 w-full h-full pointer-events-none">
+          <defs>
+            {/* Glow filter for strong connections */}
+            <filter
+              id="connection-glow"
+              x="-50%"
+              y="-50%"
+              width="200%"
+              height="200%"
+            >
+              <feGaussianBlur in="SourceGraphic" stdDeviation="6" />
+            </filter>
+
+            {/* Territory radial gradients per player */}
+            {analysis.players.map((p) => (
+              <radialGradient key={p.id} id={`territory-${p.id}`}>
+                <stop offset="0%" stopColor={p.color} stopOpacity={0.1} />
+                <stop offset="70%" stopColor={p.color} stopOpacity={0.03} />
+                <stop offset="100%" stopColor={p.color} stopOpacity={0} />
+              </radialGradient>
+            ))}
+          </defs>
+
+          {/* Territory / influence zones behind each player */}
+          {analysis.players.map((p) => {
+            const connectionCount = analysis.connections.filter(
+              (c) => c.from === p.id || c.to === p.id
+            ).length;
+            const radius = 60 + connectionCount * 25;
+            return (
+              <circle
+                key={`territory-${p.id}`}
+                cx={p.position.x + 24}
+                cy={p.position.y + 24}
+                r={radius}
+                fill={`url(#territory-${p.id})`}
+              />
+            );
+          })}
+
+          {/* Connection lines */}
           {analysis.connections.map((conn, i) => (
-            <ConnectionLine key={i} conn={conn} players={analysis.players} />
+            <ConnectionLine
+              key={i}
+              conn={conn}
+              players={analysis.players}
+              index={i}
+            />
           ))}
         </svg>
+
+        {/* Selection ripple effect */}
+        {ripple && (
+          <div
+            key={ripple.key}
+            className="absolute rounded-full pointer-events-none"
+            style={{
+              left: ripple.x - 40,
+              top: ripple.y - 40,
+              width: 80,
+              height: 80,
+              border: `2px solid ${ripple.color}`,
+              animation: 'selection-ripple 0.6s ease-out forwards',
+            }}
+            onAnimationEnd={() => setRipple(null)}
+          />
+        )}
 
         {/* Players */}
         {analysis.players.map((player) => (
@@ -153,6 +349,10 @@ export default function GameBoard() {
               top: player.position.y,
             }}
             onMouseDown={(e) => handleMouseDown(player.id, e)}
+            onMouseEnter={() => {
+              if (!dragging) setHoveredPlayer(player.id);
+            }}
+            onMouseLeave={() => setHoveredPlayer(null)}
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ type: 'spring', delay: 0.1 }}
@@ -161,9 +361,34 @@ export default function GameBoard() {
               player={player}
               size={6}
               selected={selectedPlayer === player.id}
-              onClick={() => setSelectedPlayer(selectedPlayer === player.id ? null : player.id)}
+              onClick={() => handlePlayerClick(player)}
               animate={dragging !== player.id}
             />
+
+            {/* Hover speech bubble with top goal */}
+            <AnimatePresence>
+              {hoveredPlayer === player.id &&
+                !dragging &&
+                selectedPlayer !== player.id &&
+                player.goals.length > 0 && (
+                  <motion.div
+                    className="absolute -top-10 left-1/2 -translate-x-1/2 whitespace-nowrap bg-[#1a1a2e]/95 backdrop-blur-sm border border-[#25253e] rounded-md px-2.5 py-1 text-[10px] pointer-events-none z-50"
+                    initial={{ opacity: 0, y: 4, scale: 0.9 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 4, scale: 0.9 }}
+                    transition={{ duration: 0.15 }}
+                  >
+                    <span className="opacity-50">💭</span>{' '}
+                    <span style={{ color: player.color }}>
+                      {player.goals[0]}
+                    </span>
+                    <div
+                      className="absolute left-1/2 -translate-x-1/2 -bottom-1 w-2 h-2 rotate-45 border-r border-b border-[#25253e]"
+                      style={{ backgroundColor: '#1a1a2e' }}
+                    />
+                  </motion.div>
+                )}
+            </AnimatePresence>
           </motion.div>
         ))}
 
@@ -175,24 +400,36 @@ export default function GameBoard() {
             animate={{ opacity: 1, y: 0 }}
           >
             {(() => {
-              const player = analysis.players.find((p) => p.id === selectedPlayer);
+              const player = analysis.players.find(
+                (p) => p.id === selectedPlayer
+              );
               if (!player) return null;
-              const playerIncentives = analysis.incentives.filter((i) => i.playerId === player.id);
+              const playerIncentives = analysis.incentives.filter(
+                (i) => i.playerId === player.id
+              );
               return (
                 <div className="flex gap-4">
                   <div className="flex-1">
-                    <h4 className="font-bold text-sm" style={{ color: player.color }}>
+                    <h4
+                      className="font-bold text-sm"
+                      style={{ color: player.color }}
+                    >
                       {player.emoji} {player.name}
                     </h4>
                     <p className="text-xs opacity-70 mt-1">{player.role}</p>
                     <div className="mt-2">
-                      <span className="text-[10px] uppercase tracking-wider opacity-50">Goals</span>
+                      <span className="text-[10px] uppercase tracking-wider opacity-50">
+                        Goals
+                      </span>
                       <div className="flex flex-wrap gap-1 mt-1">
                         {player.goals.map((g, i) => (
                           <span
                             key={i}
                             className="text-[10px] px-1.5 py-0.5 rounded-full border"
-                            style={{ borderColor: player.color + '40', color: player.color }}
+                            style={{
+                              borderColor: player.color + '40',
+                              color: player.color,
+                            }}
                           >
                             {g}
                           </span>
@@ -201,7 +438,9 @@ export default function GameBoard() {
                     </div>
                   </div>
                   <div className="flex-1">
-                    <span className="text-[10px] uppercase tracking-wider opacity-50">Incentives</span>
+                    <span className="text-[10px] uppercase tracking-wider opacity-50">
+                      Incentives
+                    </span>
                     {playerIncentives.map((inc, i) => (
                       <div key={i} className="mt-1">
                         <div className="flex items-center gap-2">
@@ -218,12 +457,16 @@ export default function GameBoard() {
                             {Math.round(inc.strength * 100)}%
                           </span>
                         </div>
-                        <p className="text-[10px] opacity-60 mt-0.5">{inc.incentive}</p>
+                        <p className="text-[10px] opacity-60 mt-0.5">
+                          {inc.incentive}
+                        </p>
                       </div>
                     ))}
                   </div>
                   <div className="flex-1">
-                    <span className="text-[10px] uppercase tracking-wider opacity-50">Strategies</span>
+                    <span className="text-[10px] uppercase tracking-wider opacity-50">
+                      Strategies
+                    </span>
                     <div className="flex flex-col gap-1 mt-1">
                       {player.strategies.map((s, i) => (
                         <span

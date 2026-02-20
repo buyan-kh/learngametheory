@@ -193,12 +193,36 @@ body {
   main { padding: 0 !important; }
 }
 
+/* GameBoard ambient particle floating */
+@keyframes gb-float-1 {
+  0%, 100% { transform: translateY(0) translateX(0); }
+  33% { transform: translateY(-20px) translateX(12px); }
+  66% { transform: translateY(-8px) translateX(-15px); }
+}
+@keyframes gb-float-2 {
+  0%, 100% { transform: translateY(0) translateX(0); }
+  33% { transform: translateY(15px) translateX(-10px); }
+  66% { transform: translateY(-12px) translateX(18px); }
+}
+@keyframes gb-float-3 {
+  0%, 100% { transform: translateY(0) translateX(0); }
+  33% { transform: translateY(-14px) translateX(-8px); }
+  66% { transform: translateY(10px) translateX(14px); }
+}
+
+/* GameBoard selection ripple */
+@keyframes selection-ripple {
+  0% { transform: scale(0.3); opacity: 0.8; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
 /* Reduce motion for accessibility */
 @media (prefers-reduced-motion: reduce) {
   .animate-float,
   .animate-pulse-ring,
   .animate-convergence-pulse,
-  .animate-shimmer {
+  .animate-shimmer,
+  .gb-particle {
     animation: none !important;
   }
 }
