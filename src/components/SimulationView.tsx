@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '@/lib/store';
 import { GameAnalysis, SimulationConfig, SimulationResult } from '@/lib/types';
 import { runClientSimulation } from '@/lib/simulation';
+import PixelCharacter from './PixelCharacter';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -76,6 +77,91 @@ const STRATEGY_OPTIONS: {
     description: 'Strategy probabilities evolve based on relative payoff performance.',
   },
 ];
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Generate a smooth SVG path through points using catmull-rom spline */
+function smoothPath(points: { x: number; y: number }[]): string {
+  if (points.length === 0) return '';
+  if (points.length === 1) return `M${points[0].x},${points[0].y}`;
+  if (points.length === 2)
+    return `M${points[0].x},${points[0].y}L${points[1].x},${points[1].y}`;
+  let d = `M${points[0].x},${points[0].y}`;
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[Math.max(0, i - 1)];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[Math.min(points.length - 1, i + 2)];
+    const cp1x = p1.x + (p2.x - p0.x) / 6;
+    const cp1y = p1.y + (p2.y - p0.y) / 6;
+    const cp2x = p2.x - (p3.x - p1.x) / 6;
+    const cp2y = p2.y - (p3.y - p1.y) / 6;
+    d += ` C${cp1x},${cp1y} ${cp2x},${cp2y} ${p2.x},${p2.y}`;
+  }
+  return d;
+}
+
+/** Animated counting number that eases from previous value to new value */
+function AnimatedNumber({ value, duration = 1000 }: { value: number; duration?: number }) {
+  const [display, setDisplay] = useState(0);
+  const fromRef = useRef(0);
+  const rafRef = useRef(0);
+
+  useEffect(() => {
+    const from = fromRef.current;
+    const diff = value - from;
+    const startTime = performance.now();
+    cancelAnimationFrame(rafRef.current);
+    const tick = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplay(from + diff * eased);
+      if (progress < 1) rafRef.current = requestAnimationFrame(tick);
+      else fromRef.current = value;
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [value, duration]);
+
+  return <>{display.toFixed(1)}</>;
+}
+
+/** Particle burst for convergence celebration */
+function ConvergenceBurst() {
+  const particles = useMemo(
+    () =>
+      Array.from({ length: 12 }, (_, i) => ({
+        angle: (i / 12) * Math.PI * 2,
+        dist: 30 + Math.random() * 30,
+        size: 3 + Math.random() * 4,
+        color: STRATEGY_COLORS[i % STRATEGY_COLORS.length],
+      })),
+    [],
+  );
+
+  return (
+    <div className="absolute inset-0 pointer-events-none flex items-center justify-center overflow-hidden">
+      {particles.map((p, i) => (
+        <motion.div
+          key={i}
+          className="absolute rounded-full"
+          style={{ width: p.size, height: p.size, backgroundColor: p.color }}
+          initial={{ x: 0, y: 0, opacity: 1, scale: 0 }}
+          animate={{
+            x: Math.cos(p.angle) * p.dist,
+            y: Math.sin(p.angle) * p.dist,
+            opacity: 0,
+            scale: 1.5,
+          }}
+          transition={{ duration: 0.8, ease: 'easeOut' }}
+        />
+      ))}
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -355,19 +441,19 @@ function SetupPanel({
 }
 
 // ---------------------------------------------------------------------------
-// Timeline Chart (DIV-based bar chart)
+// Timeline Chart (SVG Line Chart)
 // ---------------------------------------------------------------------------
 
-function TimelineChart({
-  result,
-}: {
-  result: SimulationResult;
-}) {
+function TimelineChart({ result }: { result: SimulationResult }) {
   const playerIds = result.analysis.players.map((p) => p.id);
   const nameOf = (id: string) => result.analysis.players.find((p) => p.id === id)?.name ?? id;
-  const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Find the max single-round payoff for scaling
+  const W = 600;
+  const H = 200;
+  const PAD = { top: 10, right: 10, bottom: 25, left: 45 };
+  const chartW = W - PAD.left - PAD.right;
+  const chartH = H - PAD.top - PAD.bottom;
+
   const maxPayoff = useMemo(() => {
     let m = 0;
     for (const round of result.rounds) {
@@ -378,14 +464,15 @@ function TimelineChart({
     return Math.max(m, 1);
   }, [result.rounds, playerIds]);
 
-  // Auto-scroll to end when results appear
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollLeft = scrollRef.current.scrollWidth;
-    }
-  }, [result]);
+  const getX = (idx: number) =>
+    PAD.left + (result.rounds.length > 1 ? (idx / (result.rounds.length - 1)) * chartW : chartW / 2);
+  const getY = (payoff: number) =>
+    PAD.top + chartH - (payoff / maxPayoff) * chartH;
 
-  const BAR_HEIGHT = 120;
+  const convergenceIdx = useMemo(() => {
+    if (!result.convergence.converged || result.convergence.equilibriumRound == null) return -1;
+    return result.rounds.findIndex((r) => r.round === result.convergence.equilibriumRound);
+  }, [result.rounds, result.convergence]);
 
   return (
     <motion.div
@@ -420,67 +507,213 @@ function TimelineChart({
         )}
       </div>
 
-      {/* Chart area */}
-      <div
-        ref={scrollRef}
-        className="overflow-x-auto pb-2"
-        style={{ scrollbarWidth: 'thin' }}
-      >
-        <div className="flex items-end gap-[2px] min-w-max" style={{ height: BAR_HEIGHT + 24 }}>
-          {result.rounds.map((round, rIdx) => {
-            const isConvergencePoint =
-              result.convergence.converged && round.round === result.convergence.equilibriumRound;
+      {/* SVG Line Chart */}
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          {playerIds.map((pid, i) => (
+            <linearGradient key={pid} id={`pg-${pid}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={PLAYER_LINE_COLORS[i % PLAYER_LINE_COLORS.length]} stopOpacity="0.2" />
+              <stop offset="100%" stopColor={PLAYER_LINE_COLORS[i % PLAYER_LINE_COLORS.length]} stopOpacity="0" />
+            </linearGradient>
+          ))}
+        </defs>
 
+        {/* Grid lines */}
+        {[0, 0.25, 0.5, 0.75, 1].map((f) => (
+          <line
+            key={f}
+            x1={PAD.left}
+            y1={getY(f * maxPayoff)}
+            x2={W - PAD.right}
+            y2={getY(f * maxPayoff)}
+            stroke="#25253e"
+            strokeWidth="0.5"
+          />
+        ))}
+
+        {/* Y axis labels */}
+        {[0, 0.5, 1].map((f) => (
+          <text
+            key={f}
+            x={PAD.left - 5}
+            y={getY(f * maxPayoff)}
+            fill="#e0e0ff"
+            fillOpacity="0.3"
+            fontSize="8"
+            textAnchor="end"
+            dominantBaseline="middle"
+          >
+            {(f * maxPayoff).toFixed(0)}
+          </text>
+        ))}
+
+        {/* Convergence vertical dashed line */}
+        {convergenceIdx >= 0 && (
+          <line
+            x1={getX(convergenceIdx)}
+            y1={PAD.top}
+            x2={getX(convergenceIdx)}
+            y2={PAD.top + chartH}
+            stroke="#ffd43b"
+            strokeWidth="1"
+            strokeDasharray="4 3"
+            opacity="0.6"
+          />
+        )}
+
+        {/* Player lines, gradient fills, dot markers */}
+        {playerIds.map((pid, pIdx) => {
+          const color = PLAYER_LINE_COLORS[pIdx % PLAYER_LINE_COLORS.length];
+          const points = result.rounds.map((r, i) => ({
+            x: getX(i),
+            y: getY(r.payoffs[pid] ?? 0),
+          }));
+          if (points.length === 0) return null;
+
+          const linePath = smoothPath(points);
+          const areaPath =
+            `${linePath} L${points[points.length - 1].x},${PAD.top + chartH} L${points[0].x},${PAD.top + chartH} Z`;
+
+          return (
+            <g key={pid}>
+              {/* Gradient area fill */}
+              <path d={areaPath} fill={`url(#pg-${pid})`} opacity="0.8" />
+              {/* Smooth bezier line */}
+              <path
+                d={linePath}
+                fill="none"
+                stroke={color}
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              {/* Dot markers at each round */}
+              {points.map((p, i) => (
+                <circle
+                  key={i}
+                  cx={p.x}
+                  cy={p.y}
+                  r="2.5"
+                  fill={color}
+                  stroke="#1a1a2e"
+                  strokeWidth="1"
+                  opacity="0.9"
+                >
+                  <title>R{result.rounds[i]?.round} {nameOf(pid)}: {(result.rounds[i]?.payoffs[pid] ?? 0).toFixed(1)}</title>
+                </circle>
+              ))}
+            </g>
+          );
+        })}
+
+        {/* X axis round labels */}
+        {result.rounds.map((r, i) => {
+          if (r.round === 1 || r.round % 5 === 0 || i === result.rounds.length - 1) {
             return (
-              <div key={round.round} className="relative flex items-end gap-[1px]">
-                {/* Convergence marker */}
-                {isConvergencePoint && (
-                  <div
-                    className="absolute -top-1 left-1/2 -translate-x-1/2 h-full border-l border-dashed border-[#ffd43b]/60 z-10 pointer-events-none"
-                    style={{ height: BAR_HEIGHT + 8 }}
-                  />
-                )}
-
-                {playerIds.map((pid, pIdx) => {
-                  const payoff = round.payoffs[pid] ?? 0;
-                  const height = Math.max((payoff / maxPayoff) * BAR_HEIGHT, 2);
-                  const color = PLAYER_LINE_COLORS[pIdx % PLAYER_LINE_COLORS.length];
-
-                  return (
-                    <motion.div
-                      key={pid}
-                      className="rounded-t-sm relative group cursor-default"
-                      style={{
-                        width: Math.max(8, Math.floor(600 / result.rounds.length / playerIds.length)),
-                        backgroundColor: color,
-                        minWidth: 4,
-                      }}
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height, opacity: 0.85 }}
-                      transition={{ duration: 0.3, delay: rIdx * 0.015 + pIdx * 0.005 }}
-                      whileHover={{ opacity: 1 }}
-                      title={`Round ${round.round} | ${nameOf(pid)}: ${payoff.toFixed(1)}`}
-                    >
-                      {/* Tooltip on hover */}
-                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block z-20">
-                        <div className="bg-[#0a0a1a] border border-[#25253e] rounded px-2 py-1 text-[9px] text-[#e0e0ff] whitespace-nowrap shadow-lg">
-                          R{round.round} {nameOf(pid)}: {payoff.toFixed(1)}
-                        </div>
-                      </div>
-                    </motion.div>
-                  );
-                })}
-
-                {/* Round label */}
-                {(round.round === 1 || round.round % 5 === 0 || round.round === result.rounds.length) && (
-                  <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 text-[8px] text-[#e0e0ff]/30">
-                    {round.round}
-                  </div>
-                )}
-              </div>
+              <text
+                key={i}
+                x={getX(i)}
+                y={H - 5}
+                fill="#e0e0ff"
+                fillOpacity="0.3"
+                fontSize="8"
+                textAnchor="middle"
+              >
+                {r.round}
+              </text>
             );
-          })}
-        </div>
+          }
+          return null;
+        })}
+      </svg>
+    </motion.div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Battle Arena
+// ---------------------------------------------------------------------------
+
+function BattleArena({
+  result,
+  currentRoundIdx,
+}: {
+  result: SimulationResult;
+  currentRoundIdx: number;
+}) {
+  const players = result.analysis.players;
+  const round = result.rounds[currentRoundIdx];
+  if (!round) return null;
+
+  const playerIds = players.map((p) => p.id);
+  const maxPayoff = Math.max(...playerIds.map((id) => round.payoffs[id] ?? 0));
+
+  return (
+    <motion.div
+      className="rounded-2xl border border-[#25253e] bg-[#1a1a2e]/80 backdrop-blur-sm p-4"
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+    >
+      <div className="flex items-center justify-between text-[10px] mb-3">
+        <span className="font-bold text-[#a29bfe] flex items-center gap-1.5">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" />
+          </svg>
+          Round {round.round}
+        </span>
+        <span className="text-[#e0e0ff]/30">Battle Arena</span>
+      </div>
+      <div className="flex items-center justify-center gap-6 sm:gap-10">
+        {players.map((player, i) => {
+          const payoff = round.payoffs[player.id] ?? 0;
+          const isWinner = payoff >= maxPayoff && maxPayoff > 0;
+          const strategy = round.strategies[player.id] ?? '?';
+
+          return (
+            <motion.div
+              key={player.id}
+              className="flex flex-col items-center"
+              animate={{
+                opacity: isWinner ? 1 : 0.5,
+                scale: isWinner ? 1.05 : 0.95,
+              }}
+              transition={{ duration: 0.3 }}
+            >
+              {/* Speech bubble */}
+              <motion.div
+                className="px-2 py-1 rounded-lg border border-[#25253e] bg-[#0a0a1a] text-[9px] text-[#e0e0ff] mb-2 relative whitespace-nowrap"
+                key={`${round.round}-${player.id}`}
+                initial={{ opacity: 0, y: 5, scale: 0.8 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ duration: 0.2 }}
+              >
+                {strategy}
+                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-[#0a0a1a] border-r border-b border-[#25253e] rotate-45" />
+              </motion.div>
+
+              {/* Pixel character (flip alternate players to face each other) */}
+              <motion.div
+                style={{ transform: i > 0 ? 'scaleX(-1)' : undefined }}
+                animate={
+                  isWinner
+                    ? { filter: `drop-shadow(0 0 8px ${player.color})` }
+                    : { filter: 'drop-shadow(0 0 0px transparent)' }
+                }
+                transition={{ duration: 0.3 }}
+              >
+                <PixelCharacter player={player} size={4} showLabel={false} animate={false} />
+              </motion.div>
+
+              <div className="mt-1 text-[9px] font-medium" style={{ color: player.color }}>
+                {player.name}
+              </div>
+              <div className="text-[8px] text-[#e0e0ff]/40 font-mono">
+                +{payoff.toFixed(1)}
+              </div>
+            </motion.div>
+          );
+        })}
       </div>
     </motion.div>
   );
@@ -535,6 +768,20 @@ function StrategyEvolution({
       scrollRef.current.scrollLeft = scrollRef.current.scrollWidth;
     }
   }, [result]);
+
+  // Compute strategy frequencies per player for summary bars
+  const freqMap = useMemo(() => {
+    const map: Record<string, Record<string, number>> = {};
+    for (const pid of playerIds) {
+      const freq: Record<string, number> = {};
+      for (const round of result.rounds) {
+        const s = round.strategies[pid];
+        if (s) freq[s] = (freq[s] || 0) + 1;
+      }
+      map[pid] = freq;
+    }
+    return map;
+  }, [result.rounds, playerIds]);
 
   return (
     <motion.div
@@ -611,6 +858,41 @@ function StrategyEvolution({
           ))}
         </div>
       </div>
+
+      {/* Strategy frequency summary bars */}
+      {result.rounds.length > 0 && (
+        <div className="mt-4 pt-3 border-t border-[#25253e]/50 space-y-1.5">
+          <span className="text-[10px] text-[#e0e0ff]/30 font-medium">Strategy Frequency</span>
+          {playerIds.map((pid) => {
+            const freq = freqMap[pid] || {};
+            const total = result.rounds.length;
+            return (
+              <div key={pid} className="flex items-center gap-2">
+                <div className="w-24 shrink-0 text-[10px] text-[#e0e0ff]/40 truncate text-right pr-2">
+                  {nameOf(pid)}
+                </div>
+                <div className="flex-1 h-3 bg-[#0a0a1a] rounded-full overflow-hidden flex">
+                  {allStrategies.map((s) => {
+                    const pct = total > 0 ? ((freq[s] || 0) / total) * 100 : 0;
+                    if (pct === 0) return null;
+                    return (
+                      <motion.div
+                        key={s}
+                        className="h-full"
+                        style={{ backgroundColor: getStrategyColor(s, allStrategies) }}
+                        initial={{ width: 0 }}
+                        animate={{ width: `${pct}%` }}
+                        transition={{ duration: 0.5, ease: 'easeOut' }}
+                        title={`${s}: ${pct.toFixed(0)}%`}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -621,8 +903,10 @@ function StrategyEvolution({
 
 function FinalStats({
   result,
+  showCelebration,
 }: {
   result: SimulationResult;
+  showCelebration?: boolean;
 }) {
   const playerIds = result.analysis.players.map((p) => p.id);
   const nameOf = (id: string) => result.analysis.players.find((p) => p.id === id)?.name ?? id;
@@ -709,7 +993,7 @@ function FinalStats({
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] text-[#e0e0ff]/40">Total Payoff</span>
                   <span className="text-xs font-bold font-mono text-[#e0e0ff]">
-                    {ps.totalPayoff.toFixed(1)}
+                    <AnimatedNumber value={ps.totalPayoff} duration={1200} />
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -742,13 +1026,23 @@ function FinalStats({
       </div>
 
       {/* Convergence info */}
-      <div
-        className={`rounded-xl p-3 border flex items-center gap-3 ${
+      <motion.div
+        className={`rounded-xl p-3 border flex items-center gap-3 relative overflow-hidden ${
           result.convergence.converged
             ? 'border-[#00b894]/30 bg-[#00b894]/5'
             : 'border-[#ffd43b]/30 bg-[#ffd43b]/5'
         }`}
+        animate={
+          showCelebration && result.convergence.converged
+            ? {
+                borderColor: ['#00b894', '#6c5ce7', '#ffd43b', '#00b894'],
+                scale: [1, 1.02, 1],
+              }
+            : {}
+        }
+        transition={{ duration: 1 }}
       >
+        {showCelebration && result.convergence.converged && <ConvergenceBurst />}
         <div
           className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm ${
             result.convergence.converged
@@ -766,7 +1060,7 @@ function FinalStats({
             </svg>
           )}
         </div>
-        <div>
+        <div className="relative z-10">
           <div className="text-xs font-bold text-[#e0e0ff]">
             {result.convergence.converged
               ? `Converged at round ${result.convergence.equilibriumRound}`
@@ -780,7 +1074,7 @@ function FinalStats({
               : 'Strategies continued to fluctuate throughout the simulation window.'}
           </div>
         </div>
-      </div>
+      </motion.div>
     </motion.div>
   );
 }
@@ -858,6 +1152,10 @@ export default function SimulationView() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
 
+  // Convergence celebration state
+  const [showCelebration, setShowCelebration] = useState(false);
+  const convergenceShownRef = useRef(false);
+
   // ---------------------------------------------------------------------------
   // Client-side simulation handler (synchronous, no API call)
   // ---------------------------------------------------------------------------
@@ -872,6 +1170,8 @@ export default function SimulationView() {
       // Start animated playback
       setDisplayedRounds(0);
       setIsPlaying(true);
+      convergenceShownRef.current = false;
+      setShowCelebration(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Simulation failed');
     } finally {
@@ -900,6 +1200,28 @@ export default function SimulationView() {
     }, 200 / playbackSpeed);
     return () => clearInterval(interval);
   }, [isPlaying, displayedRounds, simulationResult, playbackSpeed]);
+
+  // ---------------------------------------------------------------------------
+  // Convergence detection during playback
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    if (
+      !simulationResult?.convergence.converged ||
+      simulationResult.convergence.equilibriumRound == null ||
+      convergenceShownRef.current
+    )
+      return;
+
+    const eqRound = simulationResult.convergence.equilibriumRound;
+    const currentRound = simulationResult.rounds[displayedRounds - 1]?.round ?? 0;
+
+    if (currentRound >= eqRound) {
+      convergenceShownRef.current = true;
+      setShowCelebration(true);
+      const timer = setTimeout(() => setShowCelebration(false), 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [displayedRounds, simulationResult]);
 
   // ---------------------------------------------------------------------------
   // Sliced result for progressive chart rendering
@@ -976,6 +1298,8 @@ export default function SimulationView() {
               onClick={() => {
                 setDisplayedRounds(0);
                 setIsPlaying(true);
+                convergenceShownRef.current = false;
+                setShowCelebration(false);
               }}
               className="w-7 h-7 rounded-lg bg-[#25253e] flex items-center justify-center text-[#a29bfe]
                 hover:bg-[#6c5ce720] transition-colors"
@@ -994,6 +1318,8 @@ export default function SimulationView() {
                   // If at the end, restart playback
                   setDisplayedRounds(0);
                   setIsPlaying(true);
+                  convergenceShownRef.current = false;
+                  setShowCelebration(false);
                 } else {
                   setIsPlaying(!isPlaying);
                 }
@@ -1051,6 +1377,44 @@ export default function SimulationView() {
         </motion.div>
       )}
 
+      {/* Battle Arena (shows during playback) */}
+      <AnimatePresence>
+        {displayedResult && displayedResult.rounds.length > 0 && !playbackComplete && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <BattleArena
+              result={displayedResult}
+              currentRoundIdx={displayedResult.rounds.length - 1}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Convergence celebration (during playback) */}
+      <AnimatePresence>
+        {showCelebration && (
+          <motion.div
+            className="relative rounded-2xl border-2 border-[#00b894] bg-[#00b894]/10 p-4 flex items-center justify-center overflow-hidden"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.4 }}
+          >
+            <ConvergenceBurst />
+            <div className="text-center relative z-10">
+              <div className="text-sm font-bold text-[#00b894]">Convergence Reached!</div>
+              <div className="text-[10px] text-[#e0e0ff]/50">
+                Equilibrium at round {simulationResult?.convergence.equilibriumRound}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Results */}
       <AnimatePresence>
         {displayedResult && displayedResult.rounds.length > 0 && (
@@ -1074,7 +1438,7 @@ export default function SimulationView() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4 }}
               >
-                <FinalStats result={simulationResult!} />
+                <FinalStats result={simulationResult!} showCelebration={showCelebration} />
                 <InsightsPanel insights={simulationResult!.insights} />
               </motion.div>
             )}
