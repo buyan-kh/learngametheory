@@ -4,6 +4,8 @@ import { useRef, useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '@/lib/store';
 import PixelCharacter from './PixelCharacter';
+import EditableList from './EditableList';
+import EditableIncentiveList from './EditableIncentiveList';
 import { Connection, Player } from '@/lib/types';
 
 const CONNECTION_COLORS = {
@@ -149,8 +151,21 @@ function ConnectionLine({
 const FLOAT_ANIMATIONS = ['gb-float-1', 'gb-float-2', 'gb-float-3'];
 
 export default function GameBoard() {
-  const { analysis, selectedPlayer, setSelectedPlayer, updatePlayerPosition } =
-    useStore();
+  const {
+    analysis,
+    selectedPlayer,
+    setSelectedPlayer,
+    updatePlayerPosition,
+    addPlayerGoal,
+    removePlayerGoal,
+    editPlayerGoal,
+    addPlayerStrategy,
+    removePlayerStrategy,
+    editPlayerStrategy,
+    addIncentive,
+    removeIncentive,
+    editIncentive,
+  } = useStore();
   const boardRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -395,7 +410,7 @@ export default function GameBoard() {
         {/* Selected player info overlay */}
         {selectedPlayer && (
           <motion.div
-            className="absolute bottom-4 left-4 right-4 bg-[#1a1a2e]/95 backdrop-blur-sm border border-[#25253e] rounded-lg p-4"
+            className="absolute bottom-4 left-4 right-4 bg-[#1a1a2e]/95 backdrop-blur-sm border border-[#25253e] rounded-lg p-4 max-h-[280px] overflow-y-auto"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
           >
@@ -418,65 +433,36 @@ export default function GameBoard() {
                     </h4>
                     <p className="text-xs opacity-70 mt-1">{player.role}</p>
                     <div className="mt-2">
-                      <span className="text-[10px] uppercase tracking-wider opacity-50">
-                        Goals
-                      </span>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {player.goals.map((g, i) => (
-                          <span
-                            key={i}
-                            className="text-[10px] px-1.5 py-0.5 rounded-full border"
-                            style={{
-                              borderColor: player.color + '40',
-                              color: player.color,
-                            }}
-                          >
-                            {g}
-                          </span>
-                        ))}
-                      </div>
+                      <EditableList
+                        items={player.goals}
+                        label="Goals"
+                        color={player.color}
+                        onAdd={(goal) => addPlayerGoal(player.id, goal)}
+                        onRemove={(index) => removePlayerGoal(player.id, index)}
+                        onEdit={(index, newGoal) => editPlayerGoal(player.id, index, newGoal)}
+                      />
                     </div>
                   </div>
                   <div className="flex-1">
-                    <span className="text-[10px] uppercase tracking-wider opacity-50">
-                      Incentives
-                    </span>
-                    {playerIncentives.map((inc, i) => (
-                      <div key={i} className="mt-1">
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 h-1.5 bg-[#25253e] rounded-full overflow-hidden">
-                            <div
-                              className="h-full rounded-full transition-all"
-                              style={{
-                                width: `${inc.strength * 100}%`,
-                                backgroundColor: player.color,
-                              }}
-                            />
-                          </div>
-                          <span className="text-[10px] opacity-70 w-6 text-right">
-                            {Math.round(inc.strength * 100)}%
-                          </span>
-                        </div>
-                        <p className="text-[10px] opacity-60 mt-0.5">
-                          {inc.incentive}
-                        </p>
-                      </div>
-                    ))}
+                    <EditableIncentiveList
+                      incentives={playerIncentives}
+                      playerId={player.id}
+                      color={player.color}
+                      onAdd={(incentive, strength) => addIncentive(player.id, incentive, strength)}
+                      onRemove={(index) => removeIncentive(player.id, index)}
+                      onEdit={(index, updates) => editIncentive(player.id, index, updates)}
+                    />
                   </div>
                   <div className="flex-1">
-                    <span className="text-[10px] uppercase tracking-wider opacity-50">
-                      Strategies
-                    </span>
-                    <div className="flex flex-col gap-1 mt-1">
-                      {player.strategies.map((s, i) => (
-                        <span
-                          key={i}
-                          className="text-[10px] px-1.5 py-0.5 rounded bg-[#25253e]"
-                        >
-                          {s}
-                        </span>
-                      ))}
-                    </div>
+                    <EditableList
+                      items={player.strategies}
+                      label="Strategies"
+                      color={player.color}
+                      onAdd={(strategy) => addPlayerStrategy(player.id, strategy)}
+                      onRemove={(index) => removePlayerStrategy(player.id, index)}
+                      onEdit={(index, newName) => editPlayerStrategy(player.id, index, newName)}
+                      minItems={1}
+                    />
                   </div>
                 </div>
               );
