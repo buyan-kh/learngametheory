@@ -73,11 +73,20 @@ export interface SimulationRound {
   cumulativePayoffs: Record<string, number>;
 }
 
+export interface CustomSimulationStrategy {
+  id: string;
+  name: string;
+  description: string;
+  weights: Record<string, number>; // algorithm name -> 0-1 weight
+  cooperationBias: number;         // -1 to +1
+}
+
 export interface SimulationConfig {
   rounds: number;
   noise: number; // 0-1, probability of random strategy
   learningRate: number; // 0-1, how much players adapt
-  strategy: 'tit-for-tat' | 'random' | 'greedy' | 'adaptive' | 'mixed' | 'best-response' | 'fictitious-play' | 'replicator-dynamics';
+  strategy: 'tit-for-tat' | 'random' | 'greedy' | 'adaptive' | 'mixed' | 'best-response' | 'fictitious-play' | 'replicator-dynamics' | (string & {});
+  customStrategyId?: string;
 }
 
 export interface SimulationResult {
