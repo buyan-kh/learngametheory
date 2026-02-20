@@ -1,15 +1,17 @@
 'use client';
 
+import { ReactNode } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/components/AuthProvider';
 import { useStore } from '@/lib/store';
 import { AppMode } from '@/lib/types';
+import { MicroscopeIcon, SimulateIcon, ScalesIcon, GamepadIcon, FolderIcon } from '@/components/icons';
 
-const modes: { key: AppMode; label: string; icon: string }[] = [
-  { key: 'analyze', label: 'Analyze', icon: '🔬' },
-  { key: 'simulate', label: 'Simulate', icon: '🔄' },
-  { key: 'compare', label: 'Compare', icon: '⚖️' },
+const modes: { key: AppMode; label: string; icon: ReactNode }[] = [
+  { key: 'analyze', label: 'Analyze', icon: <MicroscopeIcon /> },
+  { key: 'simulate', label: 'Simulate', icon: <SimulateIcon /> },
+  { key: 'compare', label: 'Compare', icon: <ScalesIcon /> },
 ];
 
 export default function Header() {
@@ -41,7 +43,7 @@ export default function Header() {
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4">
         {/* Left: Logo */}
         <div className="flex items-center gap-2 min-w-0 shrink-0">
-          <span className="text-xl leading-none">🎮</span>
+          <span className="text-xl leading-none"><GamepadIcon /></span>
           <span className="text-sm font-bold bg-gradient-to-r from-[#6c5ce7] to-[#a29bfe] bg-clip-text text-transparent whitespace-nowrap">
             Game Theory Lab
           </span>
@@ -87,14 +89,13 @@ export default function Header() {
           {/* Saved scenarios toggle */}
           <button
             onClick={() => setShowSavedPanel(!showSavedPanel)}
-            className={`relative flex items-center justify-center w-8 h-8 rounded-lg text-sm transition-colors ${
-              showSavedPanel
+            className={`relative flex items-center justify-center w-8 h-8 rounded-lg text-sm transition-colors ${showSavedPanel
                 ? 'bg-[#6c5ce7]/20 text-[#a29bfe]'
                 : 'text-[#e0e0ff]/40 hover:text-[#e0e0ff]/70 hover:bg-[#25253e]/50'
-            }`}
+              }`}
             title="Saved scenarios"
           >
-            📁
+            <FolderIcon />
             {savedScenarios.length > 0 && (
               <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-[#6c5ce7] text-[10px] font-bold text-white leading-none">
                 {savedScenarios.length > 99 ? '99+' : savedScenarios.length}

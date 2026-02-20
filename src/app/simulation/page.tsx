@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import Header from '@/components/Header';
 import SimulationView from '@/components/SimulationView';
+import { SimulateIcon } from '@/components/icons';
 
 export default function SimulationPage() {
   const router = useRouter();
@@ -28,7 +29,7 @@ export default function SimulationPage() {
           <div className="max-w-5xl mx-auto mb-6 flex items-center justify-between">
             <div>
               <h1 className="text-xl font-bold flex items-center gap-2">
-                <span>🔄</span> Simulation Mode
+                <span><SimulateIcon /></span> Simulation Mode
               </h1>
               <p className="text-xs opacity-40 mt-1">
                 Run iterated games and watch strategies evolve

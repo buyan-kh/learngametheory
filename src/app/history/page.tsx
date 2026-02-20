@@ -9,6 +9,7 @@ import { Scenario } from '@/lib/types';
 import { useStore } from '@/lib/store';
 import Header from '@/components/Header';
 import PixelCharacter from '@/components/PixelCharacter';
+import { OpenFolderIcon, EmptyBoxIcon, ScalesIcon, TrashIcon } from '@/components/icons';
 
 export default function HistoryPage() {
   const { user } = useAuth();
@@ -85,7 +86,7 @@ export default function HistoryPage() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2">
-              <span>📂</span> Analysis History
+              <OpenFolderIcon /> Analysis History
             </h1>
             <p className="text-xs opacity-40 mt-1">
               Your saved game theory analyses
@@ -111,7 +112,7 @@ export default function HistoryPage() {
           </div>
         ) : scenarios.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
-            <span className="text-5xl opacity-30">📭</span>
+            <span className="text-5xl opacity-30"><EmptyBoxIcon size="1.5em" /></span>
             <p className="text-sm opacity-40">No saved scenarios yet.</p>
             <button
               onClick={() => router.push('/')}
@@ -189,7 +190,7 @@ export default function HistoryPage() {
                       className="w-7 h-7 flex items-center justify-center rounded-lg text-xs hover:bg-[#25253e] transition-colors"
                       title="Compare"
                     >
-                      &#x2696;&#xFE0F;
+                      <ScalesIcon />
                     </button>
                     <button
                       onClick={(e) => {
@@ -208,7 +209,7 @@ export default function HistoryPage() {
                           &#x23F3;
                         </motion.span>
                       ) : (
-                        '&#x1F5D1;&#xFE0F;'
+                        <TrashIcon />
                       )}
                     </button>
                   </div>

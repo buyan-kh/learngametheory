@@ -8,6 +8,7 @@ import {
   signUp,
   signInWithGoogle,
 } from '@/lib/supabase-auth';
+import { GamepadIcon } from '@/components/icons';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -70,7 +71,7 @@ export default function LoginPage() {
             animate={{ y: [0, -5, 0] }}
             transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
           >
-            🎮
+            <GamepadIcon size="2em" />
           </motion.div>
           <h1 className="text-xl font-bold bg-gradient-to-r from-[#6c5ce7] to-[#a29bfe] bg-clip-text text-transparent">
             Game Theory Lab

@@ -6,6 +6,7 @@ import { useAuth } from '@/components/AuthProvider';
 import { useStore } from '@/lib/store';
 import { getUserScenarios, deleteScenario, saveScenario } from '@/lib/supabase-db';
 import { Scenario, GameAnalysis } from '@/lib/types';
+import { OpenFolderIcon, LockIcon, EmptyBoxIcon, TrashIcon, SaveIcon, ScalesIcon } from '@/components/icons';
 
 // ---------------------------------------------------------------------------
 // SavedScenarios -- slide-in panel from the right
@@ -116,7 +117,7 @@ export default function SavedScenarios() {
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--surface-light)]">
               <h3 className="text-sm font-bold text-[var(--accent-light)] flex items-center gap-2">
-                <span>📂</span> Saved Scenarios
+                <OpenFolderIcon /> Saved Scenarios
               </h3>
               <button
                 onClick={() => setShowSavedPanel(false)}
@@ -132,7 +133,7 @@ export default function SavedScenarios() {
               {!user ? (
                 /* Not signed in */
                 <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-4">
-                  <span className="text-3xl opacity-40">🔒</span>
+                  <span className="text-3xl opacity-40"><LockIcon /></span>
                   <p className="text-xs text-[var(--foreground)] opacity-50">
                     Sign in to save and access your scenarios
                   </p>
@@ -152,7 +153,7 @@ export default function SavedScenarios() {
               ) : savedScenarios.length === 0 ? (
                 /* Empty state */
                 <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-4">
-                  <span className="text-3xl opacity-40">📭</span>
+                  <span className="text-3xl opacity-40"><EmptyBoxIcon /></span>
                   <p className="text-xs text-[var(--foreground)] opacity-50">
                     No saved scenarios yet. Analyze a scenario and save it!
                   </p>
@@ -200,7 +201,7 @@ export default function SavedScenarios() {
                         title="Add to Compare"
                         aria-label="Add to compare"
                       >
-                        &#x2696;&#xFE0F;
+                        <ScalesIcon />
                       </button>
                       <button
                         onClick={(e) => handleDelete(e, scenario.id)}
@@ -218,7 +219,7 @@ export default function SavedScenarios() {
                             ⏳
                           </motion.span>
                         ) : (
-                          '🗑️'
+                          <TrashIcon />
                         )}
                       </button>
                     </div>
@@ -268,13 +269,12 @@ export function SaveButton() {
       <motion.button
         onClick={handleSave}
         disabled={disabled || saving}
-        className={`relative flex items-center justify-center w-9 h-9 rounded-lg border transition-all text-sm ${
-          saved
+        className={`relative flex items-center justify-center w-9 h-9 rounded-lg border transition-all text-sm ${saved
             ? 'border-[var(--success)] bg-[#51cf6620] text-[var(--success)]'
             : disabled
               ? 'border-[var(--surface-light)] bg-[var(--surface)] text-[var(--foreground)] opacity-40 cursor-not-allowed'
               : 'border-[var(--surface-light)] bg-[var(--surface)] text-[var(--accent-light)] hover:border-[var(--accent)] hover:bg-[#6c5ce710]'
-        }`}
+          }`}
         whileTap={!disabled ? { scale: 0.9 } : undefined}
         aria-label={disabled ? 'Sign in to save' : 'Save scenario'}
       >
@@ -313,7 +313,7 @@ export function SaveButton() {
               exit={{ opacity: 0, scale: 0.5 }}
               className="text-xs"
             >
-              💾
+              <SaveIcon />
             </motion.span>
           )}
         </AnimatePresence>

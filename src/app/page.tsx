@@ -1,5 +1,6 @@
 'use client';
 
+import { ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '@/lib/store';
 import Header from '@/components/Header';
@@ -10,6 +11,7 @@ import LoadingAnimation from '@/components/LoadingAnimation';
 import SavedScenarios, { SaveButton } from '@/components/SavedScenarios';
 import SimulationView from '@/components/SimulationView';
 import ComparisonView from '@/components/ComparisonView';
+import { PlayersIcon, ChartIcon, BrainIcon } from '@/components/icons';
 
 function PixelDecor({ x, y, color, delay }: { x: string; y: string; color: string; delay: number }) {
   return (
@@ -61,11 +63,11 @@ function AnalyzeMode() {
 
             {/* Feature callouts */}
             <div className="max-w-3xl mx-auto mt-12 grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {[
-                { icon: '👥', title: 'Identify Players', desc: 'See who is involved as pixel characters you can drag around' },
-                { icon: '📊', title: 'Payoff Matrix', desc: 'Visual payoff matrix with Nash equilibrium analysis' },
-                { icon: '🧠', title: 'Strategy Guide', desc: 'Get strategy recommendations and outcome predictions' },
-              ].map((feature, i) => (
+              {([
+                { icon: <PlayersIcon size="1.5em" />, title: 'Identify Players', desc: 'See who is involved as pixel characters you can drag around' },
+                { icon: <ChartIcon size="1.5em" />, title: 'Payoff Matrix', desc: 'Visual payoff matrix with Nash equilibrium analysis' },
+                { icon: <BrainIcon size="1.5em" />, title: 'Strategy Guide', desc: 'Get strategy recommendations and outcome predictions' },
+              ] as { icon: ReactNode; title: string; desc: string }[]).map((feature, i) => (
                 <motion.div
                   key={i}
                   className="p-4 rounded-xl border border-[#25253e] bg-[#1a1a2e]/30"

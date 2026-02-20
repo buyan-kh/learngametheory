@@ -4,6 +4,7 @@ import { useState, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/components/AuthProvider';
 import { useStore } from '@/lib/store';
+import { KeyIcon, SparklesIcon } from '@/components/icons';
 
 export default function AuthModal() {
   const { signIn, signUp } = useAuth();
@@ -92,7 +93,7 @@ export default function AuthModal() {
             {/* Header */}
             <div className="text-center mb-6">
               <div className="text-2xl mb-2">
-                {mode === 'signin' ? '🔑' : '✨'}
+                {mode === 'signin' ? <KeyIcon size="1.5em" /> : <SparklesIcon size="1.5em" />}
               </div>
               <h2 className="text-lg font-bold text-[#e0e0ff]">
                 {mode === 'signin' ? 'Welcome Back' : 'Create Account'}

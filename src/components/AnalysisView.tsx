@@ -1,5 +1,6 @@
 'use client';
 
+import { ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { useStore } from '@/lib/store';
 import GameBoard from './GameBoard';
@@ -7,12 +8,13 @@ import PayoffMatrix from './PayoffMatrix';
 import OutcomePanel from './OutcomePanel';
 import StrategyPanel from './StrategyPanel';
 import PixelCharacter from './PixelCharacter';
+import { GamepadIcon, ChartIcon, TargetIcon, BrainIcon, ScrollIcon, PlayersIcon } from '@/components/icons';
 
-const TABS = [
-  { id: 'board' as const, label: 'Game Board', icon: '🎮' },
-  { id: 'matrix' as const, label: 'Payoff Matrix', icon: '📊' },
-  { id: 'outcomes' as const, label: 'Outcomes', icon: '🎯' },
-  { id: 'strategy' as const, label: 'Strategy', icon: '🧠' },
+const TABS: { id: 'board' | 'matrix' | 'outcomes' | 'strategy'; label: string; icon: ReactNode }[] = [
+  { id: 'board', label: 'Game Board', icon: <GamepadIcon /> },
+  { id: 'matrix', label: 'Payoff Matrix', icon: <ChartIcon /> },
+  { id: 'outcomes', label: 'Outcomes', icon: <TargetIcon /> },
+  { id: 'strategy', label: 'Strategy', icon: <BrainIcon /> },
 ];
 
 function GameTypeBadge() {
@@ -38,7 +40,7 @@ function RulesPanel() {
   return (
     <div className="space-y-2">
       <h4 className="text-xs font-bold text-[#a29bfe] flex items-center gap-1.5">
-        <span>📜</span> Rules of the Game
+        <ScrollIcon /> Rules of the Game
       </h4>
       {analysis.rules.map((rule, i) => (
         <motion.div
@@ -65,7 +67,7 @@ function PlayersSidebar() {
   return (
     <div className="space-y-3">
       <h4 className="text-xs font-bold text-[#a29bfe] flex items-center gap-1.5">
-        <span>👥</span> Players
+        <PlayersIcon /> Players
       </h4>
       <div className="flex flex-wrap gap-3">
         {analysis.players.map((player) => (
@@ -158,11 +160,10 @@ export default function AnalysisView() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                  activeTab === tab.id
+                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${activeTab === tab.id
                     ? 'bg-[#6c5ce7] text-white'
                     : 'text-[#a29bfe80] hover:text-[#a29bfe] hover:bg-[#25253e]'
-                }`}
+                  }`}
               >
                 <span>{tab.icon}</span>
                 <span className="hidden sm:inline">{tab.label}</span>

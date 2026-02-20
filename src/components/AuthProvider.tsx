@@ -10,6 +10,7 @@ import {
   onAuthStateChange,
   type User,
 } from '@/lib/supabase-auth';
+import { GamepadIcon } from '@/components/icons';
 
 interface AuthContextType {
   user: User | null;
@@ -24,7 +25,7 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   signIn: async () => ({ error: null }),
   signUp: async () => ({ error: null }),
-  signOut: async () => {},
+  signOut: async () => { },
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -85,7 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               animate={{ opacity: [0.5, 1, 0.5] }}
               transition={{ duration: 1.5, repeat: Infinity }}
             >
-              <div className="text-3xl">🎮</div>
+              <div className="text-3xl"><GamepadIcon size="1.2em" /></div>
               <div className="text-xs text-[var(--accent-light)] opacity-60">Loading...</div>
             </motion.div>
           </motion.div>

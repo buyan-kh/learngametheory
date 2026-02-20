@@ -1,13 +1,15 @@
 'use client';
 
+import { ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { useStore } from '@/lib/store';
 import { Strategy } from '@/lib/types';
+import { ShieldIcon, LightningIcon, FireIcon, BrainIcon, BookIcon } from '@/components/icons';
 
-const RISK_CONFIG = {
-  low: { color: '#51cf66', label: 'Low Risk', icon: '🛡️' },
-  medium: { color: '#ffd43b', label: 'Med Risk', icon: '⚡' },
-  high: { color: '#ff6b6b', label: 'High Risk', icon: '🔥' },
+const RISK_CONFIG: Record<string, { color: string; label: string; icon: ReactNode }> = {
+  low: { color: '#51cf66', label: 'Low Risk', icon: <ShieldIcon /> },
+  medium: { color: '#ffd43b', label: 'Med Risk', icon: <LightningIcon /> },
+  high: { color: '#ff6b6b', label: 'High Risk', icon: <FireIcon /> },
 };
 
 function StrategyCard({ strategy, index }: { strategy: Strategy; index: number }) {
@@ -124,7 +126,7 @@ export default function StrategyPanel() {
           transition={{ delay: 0.5 }}
         >
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-lg">🧠</span>
+            <span className="text-lg"><BrainIcon /></span>
             <span className="text-xs font-bold text-[#a29bfe]">Game Theorist&apos;s Recommendation</span>
           </div>
           <p className="text-xs opacity-80 leading-relaxed">{analysis.recommendation}</p>
@@ -140,7 +142,7 @@ export default function StrategyPanel() {
           transition={{ delay: 0.6 }}
         >
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-lg">📚</span>
+            <span className="text-lg"><BookIcon /></span>
             <span className="text-xs font-bold text-[#74c0fc]">Real-World Parallel</span>
           </div>
           <p className="text-xs opacity-80 leading-relaxed">{analysis.realWorldParallel}</p>

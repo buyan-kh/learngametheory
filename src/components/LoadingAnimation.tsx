@@ -1,6 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
+import { GamepadIcon } from '@/components/icons';
 
 const LOADING_MESSAGES = [
   'Identifying the players...',
@@ -57,7 +58,7 @@ export default function LoadingAnimation() {
           animate={{ rotate: 360 }}
           transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
         >
-          🎮
+          <GamepadIcon size="1.5em" />
         </motion.div>
       </div>
 
