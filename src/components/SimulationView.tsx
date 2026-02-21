@@ -5,6 +5,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '@/lib/store';
 import { GameAnalysis, SimulationConfig, SimulationResult, CustomSimulationStrategy } from '@/lib/types';
 import { runClientSimulation } from '@/lib/simulation';
+import ScenarioTemplates from './ScenarioTemplates';
+import RoundCommentary from './RoundCommentary';
+import SensitivityAnalysis from './SensitivityAnalysis';
+import PopulationDynamics from './PopulationDynamics';
+import HeadToHeadMatrix from './HeadToHeadMatrix';
+import { StrategyExplainerButton } from './StrategyExplainer';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -368,6 +374,15 @@ function SetupPanel({
               </>
             )}
           </motion.button>
+
+          {/* Scenario Templates */}
+          <div className="mt-4 pt-4 border-t border-[#25253e]/60">
+            <ScenarioTemplates onSelect={(a) => {
+              setAnalysis(a);
+              setInput(a.title);
+              addToHistory(a.title, a);
+            }} />
+          </div>
         </div>
       ) : (
         <div className="mb-5 flex items-center justify-between">
@@ -437,17 +452,19 @@ function SetupPanel({
           <span className="text-[11px] text-[#a29bfe] font-medium block mb-1.5">Strategy Algorithm</span>
           <div className="flex flex-wrap gap-2">
             {STRATEGY_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                onClick={() => onConfigChange({ strategy: opt.value })}
-                className={`px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all ${
-                  config.strategy === opt.value
-                    ? 'bg-[#6c5ce7] text-white shadow-[0_0_12px_rgba(108,92,231,0.4)]'
-                    : 'bg-[#25253e] text-[#a29bfe] hover:bg-[#6c5ce720]'
-                }`}
-              >
-                {opt.label}
-              </button>
+              <div key={opt.value} className="flex items-center gap-0.5">
+                <button
+                  onClick={() => onConfigChange({ strategy: opt.value })}
+                  className={`px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all ${
+                    config.strategy === opt.value
+                      ? 'bg-[#6c5ce7] text-white shadow-[0_0_12px_rgba(108,92,231,0.4)]'
+                      : 'bg-[#25253e] text-[#a29bfe] hover:bg-[#6c5ce720]'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+                <StrategyExplainerButton strategy={opt.value} />
+              </div>
             ))}
             {/* Custom strategy buttons */}
             {customSimulationStrategies.map((cs) => (
@@ -2023,6 +2040,7 @@ export default function SimulationView() {
   } = useStore();
 
   const [showChangeScenario, setShowChangeScenario] = useState(false);
+  const [activeAnalysisTab, setActiveAnalysisTab] = useState<'sensitivity' | 'population' | 'h2h' | null>(null);
 
   // Animated playback state
   const [displayedRounds, setDisplayedRounds] = useState(0);
@@ -2278,11 +2296,17 @@ export default function SimulationView() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
-            {/* Battle Arena */}
-            <BattleArena
-              result={simulationResult!}
-              currentRound={displayedRounds}
-            />
+            {/* Battle Arena + Commentary */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <BattleArena
+                result={simulationResult!}
+                currentRound={displayedRounds}
+              />
+              <RoundCommentary
+                result={simulationResult!}
+                currentRound={displayedRounds}
+              />
+            </div>
 
             {/* Two-column: Line chart + Score race */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -2316,6 +2340,104 @@ export default function SimulationView() {
               >
                 <FinalStats result={simulationResult!} />
                 <InsightsPanel insights={simulationResult!.insights} />
+              </motion.div>
+            )}
+
+            {/* Advanced Analysis Tools */}
+            {playbackComplete && analysis && (
+              <motion.div
+                className="space-y-4"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.2 }}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a29bfe" strokeWidth="2">
+                    <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+                  </svg>
+                  <span className="text-xs font-bold text-[#a29bfe]">Deep Analysis</span>
+                  <span className="text-[10px] text-[#e0e0ff]/30 ml-auto">Go beyond the basics</span>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {([
+                    { key: 'sensitivity' as const, label: 'Sensitivity Analysis', icon: (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+                      </svg>
+                    )},
+                    { key: 'h2h' as const, label: 'Head-to-Head Matrix', icon: (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
+                        <rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
+                      </svg>
+                    )},
+                    { key: 'population' as const, label: 'Population Dynamics', icon: (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                        <circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                      </svg>
+                    )},
+                  ]).map((tab) => (
+                    <button
+                      key={tab.key}
+                      onClick={() => setActiveAnalysisTab(activeAnalysisTab === tab.key ? null : tab.key)}
+                      className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-medium transition-all ${
+                        activeAnalysisTab === tab.key
+                          ? 'bg-[#6c5ce7] text-white shadow-[0_0_12px_rgba(108,92,231,0.4)]'
+                          : 'bg-[#25253e] text-[#a29bfe] hover:bg-[#6c5ce720]'
+                      }`}
+                    >
+                      {tab.icon}
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                <AnimatePresence mode="wait">
+                  {activeAnalysisTab === 'sensitivity' && (
+                    <motion.div
+                      key="sensitivity"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <SensitivityAnalysis
+                        analysis={analysis}
+                        baseConfig={simulationConfig}
+                        customStrategies={customSimulationStrategies}
+                      />
+                    </motion.div>
+                  )}
+                  {activeAnalysisTab === 'h2h' && (
+                    <motion.div
+                      key="h2h"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <HeadToHeadMatrix
+                        analysis={analysis}
+                        config={simulationConfig}
+                        customStrategies={customSimulationStrategies}
+                      />
+                    </motion.div>
+                  )}
+                  {activeAnalysisTab === 'population' && (
+                    <motion.div
+                      key="population"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <PopulationDynamics analysis={analysis} />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </motion.div>
             )}
           </motion.div>
