@@ -119,4 +119,168 @@ export interface ComparisonDifference {
   scenarioLabels: string[];
 }
 
-export type AppMode = 'analyze' | 'simulate' | 'compare';
+export type AppMode = 'analyze' | 'simulate' | 'compare' | 'openworld';
+
+// ---------------------------------------------------------------------------
+// Open World Simulation Types
+// ---------------------------------------------------------------------------
+
+/** A player/actor in the open world simulation — fully user-customizable */
+export interface OpenWorldPlayer {
+  id: string;
+  name: string;
+  emoji: string;
+  color: string;
+  type: 'nation' | 'corporation' | 'individual' | 'organization' | 'market' | 'custom';
+  description: string;
+  goals: string[];
+  resources: OpenWorldResource[];
+  constraints: string[];
+  personalityTraits: {
+    aggression: number;    // 0-1
+    cooperation: number;   // 0-1
+    riskTolerance: number; // 0-1
+    rationality: number;   // 0-1
+    patience: number;      // 0-1
+  };
+  alliances: string[];     // player IDs
+  rivals: string[];        // player IDs
+  position: { x: number; y: number };
+}
+
+export interface OpenWorldResource {
+  name: string;
+  amount: number;
+  maxAmount: number;
+  regenerationRate: number; // per turn
+}
+
+/** A relationship between two players */
+export interface OpenWorldRelationship {
+  fromId: string;
+  toId: string;
+  type: 'alliance' | 'rivalry' | 'trade' | 'dependency' | 'threat' | 'neutral';
+  strength: number;       // -1 to 1 (-1 hostile, 1 strong ally)
+  history: string[];      // brief history of the relationship
+}
+
+/** An action a player can take in a given turn */
+export interface OpenWorldAction {
+  id: string;
+  name: string;
+  description: string;
+  category: 'aggressive' | 'cooperative' | 'defensive' | 'economic' | 'diplomatic' | 'deceptive';
+  targetPlayerId?: string;
+  resourceCost: Record<string, number>;
+  successProbability: number; // 0-1
+  payoffOnSuccess: Record<string, number>;   // playerId -> payoff delta
+  payoffOnFailure: Record<string, number>;
+  prerequisites: string[];
+}
+
+/** A single event that happened during simulation */
+export interface OpenWorldEvent {
+  turn: number;
+  playerId: string;
+  action: OpenWorldAction;
+  targetPlayerId?: string;
+  succeeded: boolean;
+  description: string;
+  impact: Record<string, number>; // playerId -> payoff impact
+  narrativeDetail: string;
+}
+
+/** External shock/event that affects the whole world */
+export interface OpenWorldShock {
+  id: string;
+  name: string;
+  description: string;
+  turn: number;
+  probability: number;    // chance of happening each turn
+  effects: {
+    playerId: string;
+    resourceChanges: Record<string, number>;
+    payoffDelta: number;
+  }[];
+  triggered: boolean;
+}
+
+/** A rule that governs the world */
+export interface OpenWorldRule {
+  id: string;
+  name: string;
+  description: string;
+  type: 'constraint' | 'trigger' | 'modifier' | 'victory' | 'elimination';
+  condition: string;       // human-readable condition
+  effect: string;          // human-readable effect
+  active: boolean;
+}
+
+/** Turn-by-turn state snapshot */
+export interface OpenWorldTurnState {
+  turn: number;
+  playerStates: Record<string, {
+    payoff: number;
+    cumulativePayoff: number;
+    resources: Record<string, number>;
+    actionTaken: string;
+    targetPlayer?: string;
+    alliances: string[];
+    rivals: string[];
+    status: 'active' | 'eliminated' | 'won';
+  }>;
+  events: OpenWorldEvent[];
+  shocksTriggered: string[];
+  narrative: string;
+  worldState: {
+    tension: number;       // 0-1 global tension level
+    cooperation: number;   // 0-1 global cooperation level
+    volatility: number;    // 0-1 how much things are changing
+  };
+}
+
+/** AI-generated prediction for what happens next */
+export interface OpenWorldPrediction {
+  shortTerm: string;       // next 1-3 turns
+  mediumTerm: string;      // next 5-10 turns
+  longTerm: string;        // end-game prediction
+  mostLikelyOutcome: string;
+  wildcardScenario: string;
+  playerPredictions: Record<string, {
+    likelyStrategy: string;
+    survivalProbability: number;
+    threatLevel: number;
+  }>;
+  confidenceLevel: number; // 0-1
+}
+
+/** Full configuration for an open world simulation */
+export interface OpenWorldConfig {
+  totalTurns: number;              // how many turns to run
+  turnSpeed: number;               // ms delay between turns for animation
+  enableShocks: boolean;           // random external events
+  shockFrequency: number;          // 0-1
+  allianceFlexibility: number;     // 0-1 how easily alliances shift
+  eliminationEnabled: boolean;     // can players get eliminated?
+  eliminationThreshold: number;    // payoff below which player is eliminated
+  resourceScarcity: number;        // 0-1 how scarce resources are
+  informationAsymmetry: number;    // 0-1 (0 = perfect info, 1 = fog of war)
+  diplomacyWeight: number;         // 0-1 how much diplomacy matters
+}
+
+/** Full result of an open world simulation */
+export interface OpenWorldResult {
+  id: string;
+  scenarioDescription: string;
+  config: OpenWorldConfig;
+  players: OpenWorldPlayer[];
+  relationships: OpenWorldRelationship[];
+  rules: OpenWorldRule[];
+  shocks: OpenWorldShock[];
+  turns: OpenWorldTurnState[];
+  predictions: OpenWorldPrediction | null;
+  finalNarrative: string;
+  insights: string[];
+  winner: string | null;           // player ID or null if no winner
+  eliminatedPlayers: string[];
+}
