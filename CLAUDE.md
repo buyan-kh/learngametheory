@@ -22,31 +22,53 @@ src/
 │   ├── history/           # Saved analysis history
 │   ├── login/             # Auth page
 │   └── api/
-│       ├── analyze/       # Claude analysis endpoint
-│       ├── simulate/      # Server-side simulation fallback
-│       └── scenarios/     # CRUD for saved scenarios
-├── components/            # React components (~20 components)
-│   ├── SimulationView.tsx # Largest: full simulation UI (~2,475 lines)
-│   ├── ComparisonView.tsx # Side-by-side scenario comparison (~1,400 lines)
-│   ├── AnalysisView.tsx   # Main analysis display
-│   ├── GameBoard.tsx      # Interactive player positioning
-│   ├── PayoffMatrix.tsx   # Visual payoff matrix
-│   └── ...                # OutcomePanel, StrategyPanel, HeadToHeadMatrix, etc.
+│       ├── analyze/         # Claude analysis endpoint
+│       ├── simulate/        # Server-side simulation fallback
+│       ├── openworld-setup/ # AI world-builder for open world scenarios
+│       ├── predict/         # AI strategic prediction engine
+│       └── scenarios/       # CRUD for saved scenarios
+├── components/              # React components (~25+ components)
+│   ├── SimulationView.tsx   # Classic simulation UI (~2,475 lines)
+│   ├── OpenWorldView.tsx    # Open world simulation UI (setup, playback, results)
+│   ├── ComparisonView.tsx   # Side-by-side scenario comparison (~1,400 lines)
+│   ├── AnalysisView.tsx     # Main analysis display
+│   ├── GameBoard.tsx        # Interactive player positioning
+│   ├── PayoffMatrix.tsx     # Visual payoff matrix
+│   ├── openworld/           # Open world sub-components
+│   │   ├── PlayerBuilder.tsx    # Custom player editor (traits, resources, goals)
+│   │   ├── EventTimeline.tsx    # Turn-by-turn event timeline with filters
+│   │   ├── RelationshipGraph.tsx # SVG relationship graph visualization
+│   │   ├── PredictionView.tsx   # AI prediction display
+│   │   └── WorldDashboard.tsx   # Leaderboard, payoff charts, world state meters
+│   └── ...                  # OutcomePanel, StrategyPanel, HeadToHeadMatrix, etc.
 ├── lib/
-│   ├── types.ts           # All TypeScript interfaces
-│   ├── store.ts           # Zustand store (88 actions)
-│   ├── simulation.ts      # Client-side simulation engine (~1,035 lines)
-│   ├── comparison.ts      # Comparison analysis logic
-│   ├── populationSim.ts   # Population dynamics simulation
-│   └── supabase*/         # Auth + DB helpers
-└── middleware.ts           # Next.js auth middleware
+│   ├── types.ts             # All TypeScript interfaces (including 15+ open world types)
+│   ├── store.ts             # Zustand store (88 actions)
+│   ├── simulation.ts        # Classic simulation engine (~1,035 lines)
+│   ├── openWorldSim.ts      # Open world simulation engine (personality-driven AI)
+│   ├── comparison.ts        # Comparison analysis logic
+│   ├── populationSim.ts     # Population dynamics simulation
+│   └── supabase*/           # Auth + DB helpers
+└── middleware.ts             # Next.js auth middleware
 ```
 
 ## Key Features
 1. **Analyze Mode**: Natural language scenario → Claude-powered game theory analysis (game type, players, connections, payoff matrix, Nash equilibrium, outcomes, strategies)
 2. **Simulation Mode**: Iterated game simulations with 7 algorithms (Random, Greedy, Tit-for-Tat, Adaptive, Best-Response, Fictitious-Play, Replicator-Dynamics) plus custom strategy blending, convergence detection, round commentary, population dynamics, head-to-head matrix, sensitivity analysis, and 8 built-in scenario templates
 3. **Comparison Mode**: Compare 2-4 scenarios side-by-side across dimensions like risk, cooperation, payoff distribution, strategy overlap
-4. **User Accounts**: Supabase auth, save/load scenarios, analysis history
+4. **Open World Mode**: Fully customizable multi-player world simulation — users describe any real-world scenario (geopolitics, finance, corporate competition, etc.) and AI builds the world with custom players, personality traits (aggression, cooperation, risk tolerance, rationality, patience), resources, alliances, rivalries, and rules. Features include:
+   - AI-powered world builder from natural language descriptions
+   - Personality-driven decision engine (not fixed algorithms)
+   - Dynamic alliances and rivalries that evolve based on actions
+   - External shocks (market crashes, political upheaval, etc.)
+   - Resource management with scarcity and regeneration
+   - Player elimination mechanics
+   - Animated turn-by-turn playback with event timeline
+   - Relationship graph visualization
+   - AI strategic predictions (short/medium/long-term forecasts)
+   - World state meters (tension, cooperation, volatility)
+   - Payoff trajectory charts and leaderboard
+5. **User Accounts**: Supabase auth, save/load scenarios, analysis history
 
 ## Commands
 ```bash
@@ -64,7 +86,10 @@ npm run lint       # ESLint
 
 ## Architecture Notes
 - Client-side simulation for instant feedback; server-side fallback for custom strategies
+- Open world simulation engine runs client-side with personality-driven decision making; AI endpoints handle world setup and predictions
 - Single Zustand store as source of truth for all app state
 - Claude analysis endpoint returns structured JSON (GameAnalysis type) with player data, connections, payoff matrix, outcomes
+- Open world uses 15+ dedicated TypeScript types (OpenWorldPlayer, OpenWorldRelationship, OpenWorldConfig, OpenWorldResult, etc.)
 - Supabase RLS ensures users only access their own data
 - Path alias: `@/*` → `./src/*`
+- App modes: `analyze | simulate | compare | openworld` (controlled via `AppMode` type and header navigation)
