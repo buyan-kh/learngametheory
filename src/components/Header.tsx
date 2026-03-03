@@ -6,12 +6,13 @@ import { motion } from 'framer-motion';
 import { useAuth } from '@/components/AuthProvider';
 import { useStore } from '@/lib/store';
 import { AppMode } from '@/lib/types';
-import { MicroscopeIcon, SimulateIcon, ScalesIcon, GamepadIcon, FolderIcon } from '@/components/icons';
+import { MicroscopeIcon, SimulateIcon, ScalesIcon, GamepadIcon, FolderIcon, GlobeIcon } from '@/components/icons';
 
 const modes: { key: AppMode; label: string; icon: ReactNode }[] = [
   { key: 'analyze', label: 'Analyze', icon: <MicroscopeIcon /> },
   { key: 'simulate', label: 'Simulate', icon: <SimulateIcon /> },
   { key: 'compare', label: 'Compare', icon: <ScalesIcon /> },
+  { key: 'openworld', label: 'Open World', icon: <GlobeIcon /> },
 ];
 
 export default function Header() {

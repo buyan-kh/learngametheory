@@ -455,3 +455,14 @@ export function SaveIcon(props: IconProps) {
     </svg>
   );
 }
+
+/* ─── Globe / Open World ─── */
+export function GlobeIcon(props: IconProps) {
+  return (
+    <svg {...defaults(props)}>
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" />
+      <ellipse cx="12" cy="12" rx="4" ry="9" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M3.5 9h17M3.5 15h17" stroke="currentColor" strokeWidth="1" opacity="0.5" />
+    </svg>
+  );
+}
