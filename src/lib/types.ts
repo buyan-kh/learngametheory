@@ -119,7 +119,7 @@ export interface ComparisonDifference {
   scenarioLabels: string[];
 }
 
-export type AppMode = 'analyze' | 'simulate' | 'compare' | 'openworld';
+export type AppMode = 'analyze' | 'simulate' | 'compare' | 'openworld' | 'village';
 
 // ---------------------------------------------------------------------------
 // Open World Simulation Types

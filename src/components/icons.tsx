@@ -456,6 +456,25 @@ export function SaveIcon(props: IconProps) {
   );
 }
 
+/* ─── Village / Houses ─── */
+export function VillageIcon(props: IconProps) {
+  return (
+    <svg {...defaults(props)}>
+      {/* Left house */}
+      <path d="M3 14l4-4 4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M4 13v5h6v-5" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+      {/* Right house */}
+      <path d="M13 12l4-4 4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M14 11v7h6v-7" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+      {/* Tree */}
+      <circle cx="11" cy="7" r="2" stroke="currentColor" strokeWidth="1.2" opacity="0.5" />
+      <path d="M11 9v3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" opacity="0.5" />
+      {/* Ground */}
+      <path d="M2 18h20" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 /* ─── Globe / Open World ─── */
 export function GlobeIcon(props: IconProps) {
   return (

@@ -12,6 +12,7 @@ import SavedScenarios, { SaveButton } from '@/components/SavedScenarios';
 import SimulationView from '@/components/SimulationView';
 import ComparisonView from '@/components/ComparisonView';
 import OpenWorldView from '@/components/OpenWorldView';
+import VillageView from '@/components/VillageView';
 import { PlayersIcon, ChartIcon, BrainIcon } from '@/components/icons';
 
 function PixelDecor({ x, y, color, delay }: { x: string; y: string; color: string; delay: number }) {
@@ -205,6 +206,18 @@ export default function Home() {
               transition={{ duration: 0.3 }}
             >
               <OpenWorldView />
+            </motion.div>
+          )}
+
+          {appMode === 'village' && (
+            <motion.div
+              key="village"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <VillageView />
             </motion.div>
           )}
         </AnimatePresence>
